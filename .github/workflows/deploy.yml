@@ -1,0 +1,64 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Least-privilege token; Pages deploy needs pages:write + id-token:write.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; newer pushes supersede in-flight runs.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  # ---- Quality gate: lint, unit (Vitest), e2e (Playwright) ----
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx ng test --no-watch
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+
+  # ---- Build the static site and publish it as a Pages artifact ----
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build (base href derived from the repo name)
+        run: npm run build -- --base-href "/${{ github.event.repository.name }}/"
+      - name: SPA deep-link fallback
+        run: cp dist/index.html dist/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  # ---- Deploy the artifact to GitHub Pages ----
+  deploy:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

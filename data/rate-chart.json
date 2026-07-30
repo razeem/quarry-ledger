@@ -1,0 +1,170 @@
+[
+ {
+  "crusher": "MR Granites",
+  "type": "Pass",
+  "quary": 650,
+  "rent": 0,
+  "crusherRate": 675
+ },
+ {
+  "crusher": "MR Granites",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 0,
+  "crusherRate": 675
+ },
+ {
+  "crusher": "Kochammini",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 0,
+  "crusherRate": 645
+ },
+ {
+  "crusher": "Kochammini",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 0,
+  "crusherRate": 645
+ },
+ {
+  "crusher": "Mavila crusher",
+  "type": "Pass",
+  "quary": 640,
+  "rent": null,
+  "crusherRate": 675
+ },
+ {
+  "crusher": "Mavila crusher",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 0,
+  "crusherRate": 675
+ },
+ {
+  "crusher": "Desinganad crusher",
+  "type": "Pass",
+  "quary": 650,
+  "rent": 210,
+  "crusherRate": 875
+ },
+ {
+  "crusher": "Desinganad crusher",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 210,
+  "crusherRate": 875
+ },
+ {
+  "crusher": "Desinganad MR own crusher",
+  "type": "Pass",
+  "quary": 650,
+  "rent": null,
+  "crusherRate": 675
+ },
+ {
+  "crusher": "Desinganad MR own crusher",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": null,
+  "crusherRate": 675
+ },
+ {
+  "crusher": "Outside site No Profit",
+  "type": "",
+  "quary": 700,
+  "rent": null,
+  "crusherRate": 700
+ },
+ {
+  "crusher": "AVK",
+  "type": "Pass",
+  "quary": 650,
+  "rent": 250,
+  "crusherRate": 900
+ },
+ {
+  "crusher": "AVK",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 250,
+  "crusherRate": 900
+ },
+ {
+  "crusher": "AM Crusher",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 220,
+  "crusherRate": 900
+ },
+ {
+  "crusher": "Al Falah metal crusher",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 215,
+  "crusherRate": 870
+ },
+ {
+  "crusher": "Al Falah metal crusher",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 215,
+  "crusherRate": 870
+ },
+ {
+  "crusher": "Thangalathu Crusher",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 210,
+  "crusherRate": 850
+ },
+ {
+  "crusher": "Thangalathu Crusher",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 210,
+  "crusherRate": 850
+ },
+ {
+  "crusher": "Arun Kaavuvila",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 0,
+  "crusherRate": 700
+ },
+ {
+  "crusher": "Arun Kaavuvila",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 0,
+  "crusherRate": 650
+ },
+ {
+  "crusher": "Police Mahesh",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 0,
+  "crusherRate": 650
+ },
+ {
+  "crusher": "Police Mahesh",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 0,
+  "crusherRate": 650
+ },
+ {
+  "crusher": "MR Oyoor",
+  "type": "Pass",
+  "quary": 640,
+  "rent": 220,
+  "crusherRate": 900
+ },
+ {
+  "crusher": "MR Oyoor",
+  "type": "WO Pass",
+  "quary": 610,
+  "rent": 220,
+  "crusherRate": 900
+ }
+]

@@ -1,0 +1,126 @@
+<header class="topbar">
+  @if (isHandset()) {
+    <button
+      class="icon-btn"
+      type="button"
+      (click)="toggleSidebar()"
+      aria-label="Open navigation"
+      data-testid="nav-open-mobile"
+    >
+      <mat-icon>menu</mat-icon>
+    </button>
+  }
+
+  <a class="brand" routerLink="/entry" aria-label="Quarry Ledger — home">
+    <span class="brand__mark" aria-hidden="true">
+      <svg viewBox="0 0 64 64" width="34" height="34">
+        <defs>
+          <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#e07a1f" />
+            <stop offset="1" stop-color="#f5c33b" />
+          </linearGradient>
+        </defs>
+        <rect width="64" height="64" rx="15" fill="url(#brandGrad)" />
+        <!-- Stacked rock loads over a ledger baseline; mirrors public/favicon.svg. -->
+        <path d="M14 40 L23 25 L32 40 Z" fill="#ffffff" fill-opacity=".95" />
+        <path d="M30 40 L40 21 L50 40 Z" fill="#ffffff" />
+        <rect x="12" y="44" width="40" height="4" rx="2" fill="#ffffff" fill-opacity=".8" />
+      </svg>
+    </span>
+    <span class="brand__name">Quarry Ledger</span>
+  </a>
+
+  <span class="topbar__spacer"></span>
+
+  <button
+    class="icon-btn"
+    type="button"
+    (click)="cycleTheme()"
+    [matTooltip]="'Theme: ' + theme()"
+    aria-label="Switch theme"
+    data-testid="theme-cycle"
+  >
+    <mat-icon>{{
+      theme() === 'dark' ? 'dark_mode' : theme() === 'light' ? 'light_mode' : 'brightness_auto'
+    }}</mat-icon>
+  </button>
+
+  <button
+    class="icon-btn"
+    type="button"
+    (click)="openSettings()"
+    matTooltip="Settings"
+    aria-label="Open settings"
+    data-testid="settings-gear"
+  >
+    <mat-icon>settings</mat-icon>
+  </button>
+</header>
+
+<mat-sidenav-container class="app-shell">
+  <mat-sidenav
+    class="app-sidenav"
+    [class.app-sidenav--rail]="collapsed() && !isHandset()"
+    [mode]="isHandset() ? 'over' : 'side'"
+    [opened]="isHandset() ? mobileOpen() : true"
+    (openedChange)="mobileOpen.set($event)"
+  >
+    <div class="sidenav-inner">
+      <nav class="nav">
+        @for (pillar of pillars; track pillar.path) {
+          <a
+            class="nav__item"
+            [routerLink]="['/', pillar.path]"
+            routerLinkActive="nav__item--active"
+            [routerLinkActiveOptions]="{ exact: true }"
+            (click)="closeOnHandset()"
+            [matTooltip]="pillar.title"
+            [matTooltipDisabled]="!collapsed() || isHandset()"
+            matTooltipPosition="right"
+            [attr.data-testid]="'nav-' + pillar.path"
+          >
+            <mat-icon class="nav__icon" aria-hidden="true">{{ pillar.icon }}</mat-icon>
+            <span class="nav__label">{{ pillar.title }}</span>
+            @if (pillar.status === 'soon') {
+              <span class="nav__soon">Soon</span>
+            }
+          </a>
+        }
+      </nav>
+
+      <div class="nav-foot">
+        <button
+          class="nav__item nav__settings"
+          type="button"
+          (click)="openSettings()"
+          [matTooltip]="'Settings'"
+          [matTooltipDisabled]="!collapsed() || isHandset()"
+          matTooltipPosition="right"
+          aria-label="Open settings"
+          data-testid="settings-footer"
+        >
+          <mat-icon class="nav__icon" aria-hidden="true">manage_accounts</mat-icon>
+          <span class="nav__label">Settings</span>
+        </button>
+
+        @if (!isHandset()) {
+          <button
+            class="nav-collapse"
+            [class.nav-collapse--collapsed]="collapsed()"
+            type="button"
+            (click)="toggleSidebar()"
+            [matTooltip]="collapsed() ? 'Expand' : 'Collapse'"
+            [attr.aria-label]="collapsed() ? 'Expand navigation' : 'Collapse navigation'"
+            data-testid="nav-toggle"
+          >
+            <mat-icon class="nav-collapse__chevron" aria-hidden="true">chevron_left</mat-icon>
+          </button>
+        }
+      </div>
+    </div>
+  </mat-sidenav>
+
+  <mat-sidenav-content class="app-content">
+    <router-outlet />
+  </mat-sidenav-content>
+</mat-sidenav-container>

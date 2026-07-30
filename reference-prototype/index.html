@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>Quarry Ledger</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--teal:#0f766e;--teal-d:#115e59;--bg:#f4f6f5;--card:#fff;--ink:#1f2937;--mut:#6b7280;
+--line:#e5e7eb;--pink:#fdf2f2;--green:#166534;--red:#b91c1c;--amber:#fef3c7}
+*{box-sizing:border-box;margin:0;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,'Segoe UI',Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);
+padding-bottom:calc(64px + env(safe-area-inset-bottom))}
+header{background:var(--teal);color:#fff;padding:14px 16px;position:sticky;top:0;z-index:20;
+display:flex;justify-content:space-between;align-items:center}
+header h1{font-size:17px;font-weight:700}
+header .sub{font-size:11px;opacity:.85}
+.wrap{max-width:760px;margin:0 auto;padding:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.card h2{font-size:14px;color:var(--teal-d);margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
+input,select,button{font:inherit}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:15px}
+input:focus,select:focus{outline:2px solid var(--teal);border-color:transparent}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.btn{display:block;width:100%;padding:13px;border:0;border-radius:10px;background:var(--teal);color:#fff;
+font-weight:700;font-size:15px;cursor:pointer;margin-top:12px}
+.btn.sec{background:#fff;color:var(--teal-d);border:1.5px solid var(--teal)}
+.btn.danger{background:#fff;color:var(--red);border:1.5px solid var(--red)}
+.btn:active{opacity:.85}
+.preview{background:var(--pink);border-radius:10px;padding:10px;margin-top:12px;display:grid;
+grid-template-columns:1fr 1fr;gap:6px;font-size:13px}
+.preview b{font-size:15px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+.kpi .v{font-size:18px;font-weight:800;color:var(--teal-d)}
+.kpi .l{font-size:11px;color:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{padding:7px 6px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:11px;color:var(--mut);text-transform:uppercase}
+td.r,th.r{text-align:right}
+.scroll{overflow-x:auto}
+.rowitem{display:flex;justify-content:space-between;align-items:center;padding:10px 4px;border-bottom:1px solid var(--line);cursor:pointer}
+.rowitem:last-child{border-bottom:0}
+.rowitem .t1{font-weight:600;font-size:14px}
+.rowitem .t2{font-size:12px;color:var(--mut)}
+.rowitem .amt{text-align:right;font-weight:700;font-size:14px}
+.rowitem .amt small{display:block;font-weight:400;color:var(--mut)}
+.datehead{font-size:12px;font-weight:700;color:var(--teal-d);background:#e6f2f0;border-radius:6px;
+padding:5px 8px;margin:12px 0 4px;display:flex;justify-content:space-between}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);
+display:flex;z-index:30;padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;background:none;padding:9px 0 7px;font-size:11px;color:var(--mut);cursor:pointer}
+nav button.on{color:var(--teal);font-weight:700}
+nav button span{display:block;font-size:20px;line-height:1.2}
+.tab{display:none}.tab.on{display:block}
+.pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600}
+.pill.pass{background:#dcfce7;color:var(--green)}
+.pill.wo{background:#fee2e2;color:var(--red)}
+.seg{display:flex;background:#e6ebe9;border-radius:10px;padding:3px;margin-bottom:12px}
+.seg button{flex:1;border:0;background:none;padding:8px;border-radius:8px;font-size:13px;color:var(--mut);cursor:pointer}
+.seg button.on{background:#fff;color:var(--teal-d);font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;
+padding:10px 18px;border-radius:99px;font-size:13px;opacity:0;transition:.25s;z-index:50;pointer-events:none}
+.toast.show{opacity:1}
+.muted{font-size:12px;color:var(--mut)}
+.editnote{background:var(--amber);border-radius:8px;padding:8px 10px;font-size:12px;margin-bottom:10px;display:none}
+dialog{border:0;border-radius:14px;padding:0;max-width:420px;width:92%}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+.dlgbody{padding:16px}
+.flexrow{display:flex;gap:8px}
+.flexrow .btn{margin-top:8px}
+.settings-table input{padding:6px;font-size:13px}
+@media(min-width:700px){.kpis{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Quarry Ledger</h1>
+    <div class="sub">Daily Ledger is the single source of truth</div>
+  </div>
+  <div class="sub" id="rowCount"></div>
+</header>
+
+<div class="wrap">
+
+<!-- ============ ENTRY ============ -->
+<section class="tab on" id="tab-entry">
+  <div class="card">
+    <h2 id="entryTitle">New Load Entry</h2>
+    <div class="editnote" id="editNote">Editing an existing row — <a href="#" id="cancelEdit">cancel</a></div>
+    <div class="grid2">
+      <div><label>Date</label><input type="date" id="fDate"></div>
+      <div><label>Item</label><input id="fItem" value="Rock"></div>
+    </div>
+    <label>Crusher</label>
+    <select id="fCrusher"></select>
+    <label>Pass / Without pass</label>
+    <div class="grid2">
+      <select id="fPass"><option>Pass</option><option>WO Pass</option></select>
+      <div><input type="number" step="0.01" inputmode="decimal" id="fQty" placeholder="QTY (ton)"></div>
+    </div>
+    <label>Vehicle</label>
+    <input id="fVehicle" list="vehList" placeholder="Vehicle number">
+    <datalist id="vehList"></datalist>
+    <div class="grid4">
+      <div><label>Quary ₹</label><input type="number" id="fQuary" inputmode="decimal"></div>
+      <div><label>Crusher ₹</label><input type="number" id="fCrusherRate" inputmode="decimal"></div>
+      <div><label>Rent ₹/t</label><input type="number" id="fRent" inputmode="decimal"></div>
+      <div><label>Comm ₹/t</label><input type="number" id="fComm" inputmode="decimal"></div>
+    </div>
+    <div class="preview" id="preview"></div>
+    <button class="btn" id="saveBtn">Save Entry</button>
+  </div>
+</section>
+
+<!-- ============ LEDGER ============ -->
+<section class="tab" id="tab-ledger">
+  <div class="card">
+    <div class="grid2">
+      <div><label>From</label><input type="date" id="lFrom"></div>
+      <div><label>To</label><input type="date" id="lTo"></div>
+    </div>
+    <div class="muted" style="margin-top:6px">Leave blank to show the most recent days. Tap a row to edit.</div>
+  </div>
+  <div id="ledgerList"></div>
+</section>
+
+<!-- ============ REPORTS ============ -->
+<section class="tab" id="tab-reports">
+  <div class="seg" id="repSeg">
+    <button data-r="daily" class="on">Daily</button>
+    <button data-r="vehicle">Vehicle Rent</button>
+    <button data-r="crusher">Crusher</button>
+    <button data-r="monthly">Monthly</button>
+  </div>
+  <div class="card" id="repDateCard">
+    <label>Report date</label><input type="date" id="rDate">
+  </div>
+  <div id="reportBody"></div>
+</section>
+
+<!-- ============ SETTINGS ============ -->
+<section class="tab" id="tab-settings">
+  <div class="card">
+    <h2>Backup &amp; Sync</h2>
+    <div class="muted">Data lives on this device. Export regularly. Importing a teammate's export <b>merges</b> rows (no duplicates) — every entry carries a hidden unique ID.</div>
+    <button class="btn" id="expXlsx">Export Excel (.xlsx)</button>
+    <div class="flexrow">
+      <button class="btn sec" id="expJson">Backup JSON</button>
+      <button class="btn sec" id="impBtn">Import / Merge</button>
+    </div>
+    <input type="file" id="impFile" accept=".xlsx,.json" style="display:none">
+  </div>
+  <div class="card">
+    <h2>Rate Chart</h2>
+    <div class="muted" style="margin-bottom:8px">Auto-fills the entry form. Rates on a saved row never change retroactively.</div>
+    <div class="scroll"><table class="settings-table" id="rateTable"></table></div>
+    <button class="btn sec" id="addRate">+ Add rate row</button>
+    <label>Monthly Discount (₹/ton, applied when Comm rate is set)</label>
+    <input type="number" id="discRate" style="max-width:140px">
+  </div>
+  <div class="card">
+    <h2>Vehicles</h2>
+    <div class="scroll" style="max-height:300px;overflow-y:auto"><table class="settings-table" id="vehTable"></table></div>
+    <button class="btn sec" id="addVeh">+ Add vehicle</button>
+  </div>
+  <div class="card">
+    <h2>Danger zone</h2>
+    <button class="btn danger" id="wipeBtn">Erase all data on this device</button>
+  </div>
+</section>
+</div>
+
+<nav>
+  <button data-t="entry" class="on"><span>✏️</span>Entry</button>
+  <button data-t="ledger"><span>📒</span>Ledger</button>
+  <button data-t="reports"><span>📊</span>Reports</button>
+  <button data-t="settings"><span>⚙️</span>Settings</button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<dialog id="rowDlg">
+  <div class="dlgbody">
+    <h2 style="font-size:15px;margin-bottom:8px" id="dlgTitle"></h2>
+    <div id="dlgBody" class="muted" style="line-height:1.7"></div>
+    <div class="flexrow">
+      <button class="btn" id="dlgEdit">Edit</button>
+      <button class="btn danger" id="dlgDel">Delete</button>
+      <button class="btn sec" id="dlgClose">Close</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="seed.js"></script>
+<script src="calc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

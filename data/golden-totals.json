@@ -1,0 +1,128 @@
+{
+ "note": "Verified against source-workbook-v5.xlsx (LibreOffice recalc) and source photos. Unit tests MUST reproduce these exactly.",
+ "discountRatePerTon": 20,
+ "all_time": {
+  "qty": 4314.24,
+  "crusherAmount": 3062202.03,
+  "quaryAmount": 2686790,
+  "vehicleRent": 250775.75,
+  "passQty": 1565.49,
+  "passProfit": 19659.22,
+  "woQty": 2721.82,
+  "woProfit": 104973.05,
+  "discQty": 3717.71,
+  "discount": 74354.3
+ },
+ "by_date": {
+  "2025-11-14": {
+   "qty": 93.02,
+   "crusherAmount": 59994.68,
+   "quaryAmount": 57740,
+   "vehicleRent": 0,
+   "passQty": 33.38,
+   "passProfit": 166.88,
+   "woQty": 59.64,
+   "woProfit": 2087.8,
+   "discQty": 93.02,
+   "discount": 1860.3
+  },
+  "2026-03-10": {
+   "qty": 523.3,
+   "crusherAmount": 380822.65,
+   "quaryAmount": 323980,
+   "vehicleRent": 41912.5,
+   "passQty": 158.84,
+   "passProfit": 1100.55,
+   "woQty": 364.46,
+   "woProfit": 13829.6,
+   "discQty": 523.3,
+   "discount": 10466
+  },
+  "2026-07-29": {
+   "qty": 956.18,
+   "crusherAmount": 778095.65,
+   "quaryAmount": 607070,
+   "vehicleRent": 137756.05,
+   "passQty": 603.13,
+   "passProfit": 13879.35,
+   "woQty": 353.05,
+   "woProfit": 19390.25,
+   "discQty": 386.58,
+   "discount": 7731.6
+  }
+ },
+ "single_rows": [
+  {
+   "input": {
+    "id": "764901cd4da2",
+    "date": "2026-07-29",
+    "item": "Rock",
+    "crusher": "Al Falah metal crusher",
+    "passType": "WO Pass",
+    "qty": 32.66,
+    "quaryRate": 610,
+    "crusherRate": 870,
+    "rentRate": 215,
+    "commRate": 20,
+    "vehicle": "KI 40 Q 3885"
+   },
+   "expected": {
+    "crusherAmount": 28414.2,
+    "quaryAmount": 19920,
+    "vehicleTon": 32.66,
+    "vehicleRent": 7021.9,
+    "profit": 1472.3,
+    "discountQty": 32.66,
+    "discount": 653.2
+   }
+  },
+  {
+   "input": {
+    "id": "4854b84a233e",
+    "date": "2026-07-29",
+    "item": "Rock",
+    "crusher": "Al Falah metal crusher",
+    "passType": "WO Pass",
+    "qty": 32.25,
+    "quaryRate": 610,
+    "crusherRate": 870,
+    "rentRate": 215,
+    "commRate": 20,
+    "vehicle": "KL 24 H 7798"
+   },
+   "expected": {
+    "crusherAmount": 28057.5,
+    "quaryAmount": 19670,
+    "vehicleTon": 32.25,
+    "vehicleRent": 6933.75,
+    "profit": 1453.75,
+    "discountQty": 32.25,
+    "discount": 645
+   }
+  },
+  {
+   "input": {
+    "id": "3441a88b0099",
+    "date": "2026-07-29",
+    "item": "Rock",
+    "crusher": "AVK",
+    "passType": "WO Pass",
+    "qty": 30.45,
+    "quaryRate": 610,
+    "crusherRate": 900,
+    "rentRate": 220,
+    "commRate": 20,
+    "vehicle": "KL 61 D 5401"
+   },
+   "expected": {
+    "crusherAmount": 27405,
+    "quaryAmount": 18570,
+    "vehicleTon": 30.45,
+    "vehicleRent": 6699,
+    "profit": 2136,
+    "discountQty": 30.45,
+    "discount": 609
+   }
+  }
+ ]
+}

@@ -1,0 +1,291 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+}
+
+/* ---------- Top bar ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  height: 72px;
+  padding: 0 1.5rem;
+  background: var(--nav-bg);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+
+  &__spacer {
+    flex: 1 1 auto;
+  }
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  text-decoration: none;
+  color: var(--text);
+
+  &__mark {
+    display: grid;
+    place-items: center;
+    filter: drop-shadow(0 4px 12px color-mix(in srgb, var(--accent-1) 35%, transparent));
+    transition: transform var(--transition);
+  }
+  &:hover .brand__mark {
+    transform: translateY(-1px) rotate(-3deg);
+  }
+
+  &__name {
+    font-weight: 800;
+    font-size: 1.1rem;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Borderless icon button — a faint circular tint only appears on hover. */
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+
+  &:hover {
+    background: var(--chip-bg);
+    color: var(--text);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent-1);
+    outline-offset: 2px;
+  }
+
+  mat-icon {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+  }
+}
+
+@media (max-width: 560px) {
+  .brand__name {
+    display: none;
+  }
+}
+
+/* ---------- Shell + sidebar ---------- */
+.app-shell {
+  flex: 1 1 auto;
+  background: transparent; // let the ambient glow show through
+}
+
+.app-sidenav {
+  width: 256px;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  overflow-x: hidden;
+  transition: width 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
+
+  &--rail {
+    width: 74px;
+  }
+}
+// Kill Material's default drawer corner rounding so the panel edges stay sharp.
+::ng-deep .app-sidenav.mat-drawer {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.sidenav-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.nav {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0.75rem 0.6rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.nav-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0.5rem 0.6rem 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Icon-only collapse toggle — a chevron pinned left that rotates 180°. */
+.nav-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-top: 2px;
+  margin-inline-end: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition);
+
+  &:hover {
+    background: var(--chip-bg);
+    color: var(--text);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent-1);
+    outline-offset: -2px;
+  }
+
+  &__chevron {
+    font-size: 22px;
+    width: 22px;
+    height: 22px;
+    transition: transform 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  &--collapsed .nav-collapse__chevron {
+    transform: rotate(180deg);
+  }
+}
+
+.nav__item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  height: 44px;
+  padding: 0 0.7rem;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  color: var(--text-soft);
+  text-decoration: none;
+  font: inherit;
+  font-weight: 500;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  position: relative;
+  cursor: pointer;
+  transition:
+    background var(--transition),
+    color var(--transition),
+    box-shadow var(--transition);
+
+  &:hover {
+    background: var(--chip-bg);
+    color: var(--text);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent-1);
+    outline-offset: -2px;
+  }
+
+  // Active: gradient pill with an inset glow.
+  &--active {
+    background: var(--gradient);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 6px 18px color-mix(in srgb, var(--accent-1) 40%, transparent);
+  }
+}
+.nav__settings {
+  text-align: left;
+}
+
+.nav__icon {
+  flex: 0 0 auto;
+  font-size: 22px;
+  width: 22px;
+  height: 22px;
+  transition: color var(--transition);
+}
+.nav__item--active .nav__icon {
+  color: #fff;
+}
+
+.nav__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.nav__soon {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--r-pill);
+  background: var(--chip-bg);
+  color: var(--text-soft);
+}
+.nav__item--active .nav__soon {
+  background: rgb(255 255 255 / 22%);
+  color: #fff;
+}
+
+/* Rail (collapsed): centre every row and shrink items to a 44px square. */
+.app-sidenav--rail .nav,
+.app-sidenav--rail .nav-foot {
+  align-items: center;
+}
+.app-sidenav--rail .nav__item {
+  width: 44px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+}
+.app-sidenav--rail .nav__label {
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.app-sidenav--rail .nav__soon {
+  display: none;
+}
+.app-sidenav--rail .nav-collapse {
+  width: 44px;
+  justify-content: center;
+  padding: 0;
+}
+
+.app-content {
+  display: block;
+  min-height: 100%;
+  background: transparent;
+}

@@ -1,0 +1,297 @@
+// Angular Material 3 (M3) theming, retuned to the app's design language.
+// The app's OWN design tokens are the source of truth and are BRIDGED onto
+// Material's `--mat-sys-*` tokens so Material components adopt the same palette.
+@use '@angular/material' as mat;
+
+html {
+  color-scheme: light dark;
+
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$violet-palette,
+        tertiary: mat.$cyan-palette,
+      ),
+      typography: Inter,
+      density: 0,
+    )
+  );
+
+  // ---- Design tokens (shared, theme-independent) ----
+  --accent-1: #e07a1f;
+  --accent-2: #f5c33b;
+  --gradient: linear-gradient(120deg, var(--accent-1), var(--accent-2));
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --r-card: 16px;
+  --r-control: 12px;
+  --r-pill: 999px;
+  --transition: 0.25s ease;
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --app-gap: 1.5rem;
+  --app-page-max: 1180px;
+}
+
+// ---- Theme token sets (light default, dark via media + explicit [data-theme]) ----
+@mixin light-tokens {
+  --bg: #f6f8fc;
+  --bg-elev: #ffffff;
+  --bg-card: #ffffff;
+  --border: rgb(15 23 42 / 10%);
+  --text: #10182b;
+  --text-soft: #51607a;
+  --nav-bg: rgb(246 248 252 / 85%);
+  --shadow: 0 16px 40px rgb(15 23 42 / 8%);
+  --chip-bg: rgb(15 23 42 / 5%);
+  --app-elevation: 0 8px 24px rgb(15 23 42 / 6%);
+  --app-elevation-hover: 0 16px 40px rgb(15 23 42 / 12%);
+  --app-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 60%);
+}
+
+@mixin dark-tokens {
+  --bg: #0b1120;
+  --bg-elev: #111a2e;
+  --bg-card: rgb(255 255 255 / 4%);
+  --border: rgb(255 255 255 / 10%);
+  --text: #e6ebf5;
+  --text-soft: #9aa7bd;
+  --nav-bg: rgb(11 17 32 / 80%);
+  --shadow: 0 16px 40px rgb(0 0 0 / 40%);
+  --chip-bg: rgb(255 255 255 / 6%);
+  --app-elevation: 0 8px 24px rgb(0 0 0 / 35%);
+  --app-elevation-hover: 0 18px 44px rgb(0 0 0 / 50%);
+  --app-inset-highlight: inset 0 1px 0 rgb(255 255 255 / 6%);
+}
+
+html {
+  @include light-tokens;
+}
+@media (prefers-color-scheme: dark) {
+  html {
+    @include dark-tokens;
+  }
+}
+// Explicit theme choice (PreferencesStore sets html[data-theme]) wins over the media query.
+html[data-theme='light'] {
+  @include light-tokens;
+  color-scheme: light;
+}
+html[data-theme='dark'] {
+  @include dark-tokens;
+  color-scheme: dark;
+}
+
+// ---- Bridge: map Material's system tokens onto the app tokens ----
+html {
+  --mat-sys-primary: var(--accent-1);
+  --mat-sys-on-primary: #ffffff;
+  --mat-sys-primary-container: color-mix(in srgb, var(--accent-1) 18%, transparent);
+  --mat-sys-on-primary-container: var(--text);
+  --mat-sys-tertiary: var(--accent-2);
+
+  --mat-sys-background: var(--bg);
+  --mat-sys-surface: var(--bg);
+  --mat-sys-surface-dim: var(--bg);
+  --mat-sys-surface-bright: var(--bg-elev);
+  --mat-sys-surface-container-lowest: var(--bg);
+  --mat-sys-surface-container-low: var(--bg-card);
+  --mat-sys-surface-container: var(--bg-card);
+  --mat-sys-surface-container-high: var(--bg-elev);
+  --mat-sys-surface-container-highest: var(--chip-bg);
+
+  --mat-sys-on-surface: var(--text);
+  --mat-sys-on-surface-variant: var(--text-soft);
+  --mat-sys-outline: color-mix(in srgb, var(--text-soft) 55%, transparent);
+  --mat-sys-outline-variant: var(--border);
+
+  --mat-sys-error: #ef4444;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, Roboto, 'Helvetica Neue', sans-serif;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background var(--transition),
+    color var(--transition);
+}
+
+// Ambient background glow — shows through the translucent shell so the whole
+// canvas feels alive.
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      640px 440px at 88% -6%,
+      color-mix(in srgb, var(--accent-1) 20%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      520px 420px at -8% 42%,
+      color-mix(in srgb, var(--accent-2) 14%, transparent),
+      transparent 70%
+    );
+}
+
+// ---- Shared utilities ----
+
+// Card/section surface: soft shadow + faint inset top highlight (gently extruded).
+.app-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--app-elevation), var(--app-inset-highlight);
+}
+
+// Small mono tracked label (the "eyebrow").
+.app-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+
+// Gradient-clipped text for hero figures / brand.
+.gradient-text {
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+// Standard centered page wrapper used by every feature.
+.app-page {
+  position: relative;
+  z-index: 1;
+  max-width: var(--app-page-max);
+  margin: 0 auto;
+  padding: 1.9rem 1.5rem 3rem;
+}
+
+// "Data console" numerals — mono + tabular so figures line up in columns/tiles.
+.app-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+// Render Material Symbols crisply at the sizes we use.
+.mat-icon {
+  font-variation-settings: 'opsz' 24;
+}
+
+// ---- Shared form + table primitives ----
+// Token-driven and reused by every tab, so they live here rather than being
+// repeated as long utility strings in four templates. Layout/spacing still goes
+// inline as Tailwind utilities.
+
+.app-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+// 48px min height keeps every control a comfortable phone touch target.
+.app-field {
+  width: 100%;
+  min-height: 48px;
+  padding: 0.6rem 0.8rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--text);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  transition:
+    border-color var(--transition),
+    box-shadow var(--transition);
+
+  &::placeholder {
+    color: color-mix(in srgb, var(--text-soft) 70%, transparent);
+  }
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--accent-1) 45%, var(--border));
+  }
+  &:focus-visible {
+    outline: none;
+    border-color: var(--accent-1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-1) 22%, transparent);
+  }
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+// Numeric fields read as data: mono + tabular so digits line up while typing.
+.app-field--num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+// Data table. Wrap it in an `overflow-x-auto` container — the page itself must
+// never scroll sideways on a 375px screen.
+.app-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+
+  th,
+  td {
+    padding: 0.55rem 0.7rem;
+    text-align: right;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--border);
+  }
+  th:first-child,
+  td:first-child {
+    text-align: left;
+  }
+  thead th {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  tfoot td {
+    font-weight: 700;
+    border-top: 2px solid var(--border);
+    border-bottom: 0;
+  }
+  td.app-num,
+  th.app-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// Empty-state line used wherever a report or list has nothing to show.
+.app-empty {
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+  color: var(--text-soft);
+  font-size: 0.9rem;
+}

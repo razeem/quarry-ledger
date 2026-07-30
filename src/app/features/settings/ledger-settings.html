@@ -1,0 +1,319 @@
+<div class="app-page">
+  <app-page-header title="Settings" subtitle="Reference data, backups and imports." icon="tune" />
+
+  <div class="flex flex-col gap-4">
+    <!-- ---------- Discount rate ---------- -->
+    <app-section-card
+      title="Monthly discount"
+      icon="percent"
+      subtitle="Pre-fills the commission rate on new entries. Saved rows keep their own."
+    >
+      <div class="max-w-[220px]">
+        <label class="app-label" for="discount-rate">₹ per ton</label>
+        <input
+          id="discount-rate"
+          class="app-field app-field--num"
+          type="number"
+          inputmode="decimal"
+          step="1"
+          min="0"
+          [ngModel]="discountRate()"
+          (ngModelChange)="setDiscountRate($event)"
+          name="discountRate"
+          data-testid="settings-discount-rate"
+        />
+      </div>
+    </app-section-card>
+
+    <!-- ---------- Rate chart ---------- -->
+    <app-section-card
+      title="Rate chart"
+      icon="price_change"
+      [subtitle]="counts().rates + ' entries · pre-fill only, never applied to saved rows'"
+    >
+      <button
+        actions
+        mat-stroked-button
+        type="button"
+        (click)="addRate()"
+        data-testid="settings-add-rate"
+      >
+        <mat-icon>add</mat-icon>
+        Add
+      </button>
+
+      @if (rateChart().length === 0) {
+        <p class="app-empty" data-testid="settings-rates-empty">No rate entries.</p>
+      } @else {
+        <div class="overflow-x-auto -mx-1 px-1">
+          <table class="app-table" data-testid="settings-rate-table">
+            <thead>
+              <tr>
+                <th scope="col">Crusher</th>
+                <th scope="col">Pass type</th>
+                <th scope="col" class="app-num">Quary ₹/t</th>
+                <th scope="col" class="app-num">Rent ₹/t</th>
+                <th scope="col" class="app-num">Crusher ₹/t</th>
+                <th scope="col"><span class="sr-only">Remove</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (entry of rateChart(); track $index; let i = $index) {
+                <tr>
+                  <td>
+                    <input
+                      class="app-field !min-h-10 min-w-[170px]"
+                      type="text"
+                      [ngModel]="entry.crusher"
+                      (ngModelChange)="updateRate(i, { crusher: $event })"
+                      [name]="'rate-crusher-' + i"
+                      [attr.aria-label]="'Crusher name, row ' + (i + 1)"
+                      [attr.data-testid]="'rate-crusher-' + i"
+                    />
+                  </td>
+                  <td>
+                    <select
+                      class="app-field !min-h-10 min-w-[110px]"
+                      [ngModel]="entry.type"
+                      (ngModelChange)="updateRate(i, { type: $event })"
+                      [name]="'rate-type-' + i"
+                      [attr.aria-label]="'Pass type, row ' + (i + 1)"
+                      [attr.data-testid]="'rate-type-' + i"
+                    >
+                      <option value="Pass">Pass</option>
+                      <option value="WO Pass">WO Pass</option>
+                    </select>
+                  </td>
+                  <td>
+                    <input
+                      class="app-field app-field--num !min-h-10 min-w-[90px]"
+                      type="number"
+                      step="1"
+                      [ngModel]="entry.quary"
+                      (ngModelChange)="updateRate(i, { quary: +$event })"
+                      [name]="'rate-quary-' + i"
+                      [attr.aria-label]="'Quary rate, row ' + (i + 1)"
+                      [attr.data-testid]="'rate-quary-' + i"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      class="app-field app-field--num !min-h-10 min-w-[90px]"
+                      type="number"
+                      step="1"
+                      [ngModel]="entry.rent"
+                      (ngModelChange)="updateRate(i, { rent: +$event })"
+                      [name]="'rate-rent-' + i"
+                      [attr.aria-label]="'Rent rate, row ' + (i + 1)"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      class="app-field app-field--num !min-h-10 min-w-[90px]"
+                      type="number"
+                      step="1"
+                      [ngModel]="entry.crusherRate"
+                      (ngModelChange)="updateRate(i, { crusherRate: +$event })"
+                      [name]="'rate-crusher-rate-' + i"
+                      [attr.aria-label]="'Crusher rate, row ' + (i + 1)"
+                    />
+                  </td>
+                  <td>
+                    <button
+                      mat-icon-button
+                      type="button"
+                      (click)="removeRate(i)"
+                      [attr.aria-label]="'Remove rate row ' + (i + 1)"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </app-section-card>
+
+    <!-- ---------- Vehicles ---------- -->
+    <app-section-card
+      title="Vehicles"
+      icon="local_shipping"
+      [subtitle]="
+        counts().vehicles + ' vehicles · registrations are free text and never normalised'
+      "
+    >
+      <button
+        actions
+        mat-stroked-button
+        type="button"
+        (click)="addVehicle()"
+        data-testid="settings-add-vehicle"
+      >
+        <mat-icon>add</mat-icon>
+        Add
+      </button>
+
+      @if (vehicles().length === 0) {
+        <p class="app-empty" data-testid="settings-vehicles-empty">No vehicles.</p>
+      } @else {
+        <div class="overflow-x-auto -mx-1 px-1 max-h-[420px] overflow-y-auto">
+          <table class="app-table" data-testid="settings-vehicle-table">
+            <thead>
+              <tr>
+                <th scope="col">Registration</th>
+                <th scope="col">Owner</th>
+                <th scope="col"><span class="sr-only">Remove</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (vehicle of vehicles(); track $index; let i = $index) {
+                <tr>
+                  <td>
+                    <input
+                      class="app-field !min-h-10 min-w-[150px]"
+                      type="text"
+                      [ngModel]="vehicle.num"
+                      (ngModelChange)="updateVehicle(i, { num: $event })"
+                      [name]="'vehicle-num-' + i"
+                      [attr.aria-label]="'Registration, row ' + (i + 1)"
+                      [attr.data-testid]="'vehicle-num-' + i"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      class="app-field !min-h-10 min-w-[150px]"
+                      type="text"
+                      [ngModel]="vehicle.owner"
+                      (ngModelChange)="updateVehicle(i, { owner: $event })"
+                      [name]="'vehicle-owner-' + i"
+                      [attr.aria-label]="'Owner, row ' + (i + 1)"
+                      [attr.data-testid]="'vehicle-owner-' + i"
+                    />
+                  </td>
+                  <td>
+                    <button
+                      mat-icon-button
+                      type="button"
+                      (click)="removeVehicle(i)"
+                      [attr.aria-label]="'Remove vehicle row ' + (i + 1)"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </app-section-card>
+
+    <!-- ---------- Export / import ---------- -->
+    <app-section-card
+      title="Export & import"
+      icon="import_export"
+      [subtitle]="
+        counts().rows + ' rows on record · every export includes the row id used to merge'
+      "
+    >
+      <div class="flex flex-wrap gap-3">
+        <button
+          mat-flat-button
+          type="button"
+          [disabled]="busy() || !ready()"
+          (click)="exportXlsx()"
+          data-testid="settings-export-xlsx"
+        >
+          <mat-icon>table_view</mat-icon>
+          Export .xlsx
+        </button>
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="busy() || !ready()"
+          (click)="exportJson()"
+          data-testid="settings-export-json"
+        >
+          <mat-icon>data_object</mat-icon>
+          Backup .json
+        </button>
+      </div>
+
+      <div class="mt-5 flex flex-col gap-3">
+        <div>
+          <label class="app-label" for="import-merge">Import & merge (.xlsx or .json)</label>
+          <input
+            id="import-merge"
+            class="app-field"
+            type="file"
+            accept=".xlsx,.json"
+            [disabled]="busy() || !ready()"
+            (change)="onImportPicked($event, 'merge')"
+            data-testid="settings-import-merge"
+          />
+          <p class="text-xs text-[var(--text-soft)] mt-1 mb-0">
+            Deduped by row id: identical rows are skipped, changed rows updated, new rows added.
+            Importing the same file twice changes nothing.
+          </p>
+        </div>
+
+        <div>
+          <label class="app-label" for="import-replace">Restore backup (replaces everything)</label>
+          <input
+            id="import-replace"
+            class="app-field"
+            type="file"
+            accept=".xlsx,.json"
+            [disabled]="busy() || !ready()"
+            (change)="onImportPicked($event, 'replace')"
+            data-testid="settings-import-replace"
+          />
+        </div>
+      </div>
+    </app-section-card>
+
+    <!-- ---------- Danger zone ---------- -->
+    <app-section-card
+      title="Erase everything"
+      icon="warning"
+      subtitle="Deletes every row, rate and vehicle on this device. Export first."
+    >
+      @if (!confirmingErase()) {
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="busy() || !ready()"
+          (click)="eraseAll()"
+          data-testid="settings-erase"
+        >
+          <mat-icon>delete_forever</mat-icon>
+          Erase all data
+        </button>
+      } @else {
+        <div class="flex flex-wrap items-center gap-3">
+          <strong data-testid="settings-erase-confirm-prompt">
+            Erase {{ counts().rows }} rows for good?
+          </strong>
+          <button
+            mat-flat-button
+            type="button"
+            (click)="eraseAll()"
+            data-testid="settings-erase-confirm"
+          >
+            Yes, erase
+          </button>
+          <button
+            mat-button
+            type="button"
+            (click)="cancelErase()"
+            data-testid="settings-erase-cancel"
+          >
+            Cancel
+          </button>
+        </div>
+      }
+    </app-section-card>
+  </div>
+</div>

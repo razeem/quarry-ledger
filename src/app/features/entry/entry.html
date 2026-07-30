@@ -1,0 +1,243 @@
+<div class="app-page">
+  <app-page-header
+    [title]="isEditing() ? 'Edit load' : 'New load'"
+    [subtitle]="
+      isEditing()
+        ? 'Rates stay as they were snapshotted on this row.'
+        : 'Rates pre-fill from the chart and remain editable.'
+    "
+    icon="add_circle"
+  >
+    @if (isEditing()) {
+      <button
+        actions
+        mat-stroked-button
+        type="button"
+        (click)="cancelEdit()"
+        data-testid="entry-cancel"
+      >
+        <mat-icon>close</mat-icon>
+        Cancel edit
+      </button>
+    }
+  </app-page-header>
+
+  <form class="flex flex-col gap-4" (ngSubmit)="save()">
+    <app-section-card title="Load" icon="local_shipping">
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
+        <div>
+          <label class="app-label" for="entry-date">Date</label>
+          <input
+            id="entry-date"
+            class="app-field"
+            type="date"
+            [ngModel]="date()"
+            (ngModelChange)="date.set($event)"
+            name="date"
+            data-testid="entry-date"
+          />
+        </div>
+
+        <div>
+          <label class="app-label" for="entry-qty">Quantity (tons)</label>
+          <input
+            id="entry-qty"
+            class="app-field app-field--num"
+            type="number"
+            inputmode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            [ngModel]="qty()"
+            (ngModelChange)="qty.set($event)"
+            name="qty"
+            data-testid="entry-qty"
+          />
+        </div>
+
+        <div class="col-span-full">
+          <label class="app-label" for="entry-crusher">Crusher</label>
+          <input
+            id="entry-crusher"
+            class="app-field"
+            type="text"
+            list="crusher-options"
+            autocomplete="off"
+            placeholder="Type or pick a crusher"
+            [ngModel]="crusher()"
+            (ngModelChange)="onCrusherChange($event)"
+            name="crusher"
+            data-testid="entry-crusher"
+          />
+          <!-- Free text: a brand-new crusher can be typed straight in. -->
+          <datalist id="crusher-options">
+            @for (name of crushers(); track name) {
+              <option [value]="name"></option>
+            }
+          </datalist>
+        </div>
+
+        <div class="col-span-full">
+          <span class="app-label" id="entry-pass-label">Pass type</span>
+          <mat-button-toggle-group
+            class="w-full"
+            [value]="passType()"
+            (change)="onPassTypeChange($event.value)"
+            aria-labelledby="entry-pass-label"
+            data-testid="entry-pass-type"
+          >
+            <mat-button-toggle class="flex-1" value="Pass" data-testid="entry-pass"
+              >Pass</mat-button-toggle
+            >
+            <mat-button-toggle class="flex-1" value="WO Pass" data-testid="entry-wo-pass">
+              WO Pass
+            </mat-button-toggle>
+          </mat-button-toggle-group>
+        </div>
+
+        <div class="col-span-full">
+          <label class="app-label" for="entry-vehicle">Vehicle</label>
+          <input
+            id="entry-vehicle"
+            class="app-field"
+            type="text"
+            list="vehicle-options"
+            autocomplete="off"
+            placeholder="Registration (optional)"
+            [ngModel]="vehicle()"
+            (ngModelChange)="vehicle.set($event)"
+            name="vehicle"
+            data-testid="entry-vehicle"
+          />
+          <!-- Registrations are messy free text and are never normalised. -->
+          <datalist id="vehicle-options">
+            @for (num of vehicles(); track num) {
+              <option [value]="num"></option>
+            }
+          </datalist>
+        </div>
+      </div>
+    </app-section-card>
+
+    <app-section-card
+      title="Rates"
+      icon="price_change"
+      eyebrow="Snapshot"
+      subtitle="Saved onto this row as entered. Changing the chart later will not alter it."
+    >
+      <div class="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-4">
+        <div>
+          <label class="app-label" for="entry-quary-rate">Quary ₹/t</label>
+          <input
+            id="entry-quary-rate"
+            class="app-field app-field--num"
+            type="number"
+            inputmode="decimal"
+            step="1"
+            [ngModel]="quaryRate()"
+            (ngModelChange)="quaryRate.set($event)"
+            name="quaryRate"
+            data-testid="entry-quary-rate"
+          />
+        </div>
+        <div>
+          <label class="app-label" for="entry-crusher-rate">Crusher ₹/t</label>
+          <input
+            id="entry-crusher-rate"
+            class="app-field app-field--num"
+            type="number"
+            inputmode="decimal"
+            step="1"
+            [ngModel]="crusherRate()"
+            (ngModelChange)="crusherRate.set($event)"
+            name="crusherRate"
+            data-testid="entry-crusher-rate"
+          />
+        </div>
+        <div>
+          <label class="app-label" for="entry-rent-rate">Rent ₹/t</label>
+          <input
+            id="entry-rent-rate"
+            class="app-field app-field--num"
+            type="number"
+            inputmode="decimal"
+            step="1"
+            [ngModel]="rentRate()"
+            (ngModelChange)="rentRate.set($event)"
+            name="rentRate"
+            data-testid="entry-rent-rate"
+          />
+        </div>
+        <div>
+          <label class="app-label" for="entry-comm-rate">Comm ₹/t</label>
+          <input
+            id="entry-comm-rate"
+            class="app-field app-field--num"
+            type="number"
+            inputmode="decimal"
+            step="1"
+            [ngModel]="commRate()"
+            (ngModelChange)="commRate.set($event)"
+            name="commRate"
+            data-testid="entry-comm-rate"
+          />
+        </div>
+      </div>
+    </app-section-card>
+
+    <app-section-card title="This load works out to" icon="calculate" eyebrow="Live">
+      <dl class="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-x-4 gap-y-3 m-0">
+        <div>
+          <dt class="app-label">Crusher amount</dt>
+          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-crusher-amount">
+            {{ inr(preview().crusherAmount) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="app-label">Quary amount</dt>
+          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-quary-amount">
+            {{ inr(preview().quaryAmount) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="app-label">Vehicle rent</dt>
+          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-vehicle-rent">
+            {{ inr(preview().vehicleRent) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="app-label">Profit</dt>
+          <dd
+            class="app-num m-0 text-lg font-bold"
+            [style.color]="preview().profit < 0 ? 'var(--mat-sys-error)' : 'var(--mat-sys-primary)'"
+            data-testid="preview-profit"
+          >
+            {{ inr(preview().profit) }}
+          </dd>
+        </div>
+        <div>
+          <dt class="app-label">Discount</dt>
+          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-discount">
+            {{ inr(preview().discount) }}
+          </dd>
+        </div>
+      </dl>
+    </app-section-card>
+
+    <button
+      mat-flat-button
+      class="!min-h-14 !text-base"
+      type="submit"
+      [disabled]="!canSave() || !ready() || saving()"
+      data-testid="entry-save"
+    >
+      <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
+      {{ isEditing() ? 'Update load' : 'Save load' }}
+    </button>
+    @if (!canSave()) {
+      <p class="text-center text-sm text-[var(--text-soft)] m-0">
+        Enter a crusher and a quantity above 0 to save.
+      </p>
+    }
+  </form>
+</div>
