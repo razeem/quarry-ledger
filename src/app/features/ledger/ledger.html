@@ -14,7 +14,7 @@
           class="app-field"
           type="date"
           [ngModel]="from()"
-          (ngModelChange)="from.set($event)"
+          (ngModelChange)="setFrom($event)"
           name="from"
           data-testid="ledger-from"
         />
@@ -26,7 +26,7 @@
           class="app-field"
           type="date"
           [ngModel]="to()"
-          (ngModelChange)="to.set($event)"
+          (ngModelChange)="setTo($event)"
           name="to"
           data-testid="ledger-to"
         />

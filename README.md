@@ -11,15 +11,20 @@ every report is a pure computation over those rows.
 
 **Phase 1 complete** — the app is usable end to end, entirely offline:
 
-- **Entry** — date, crusher, Pass/WO Pass, quantity and vehicle, with the four rate fields
-  pre-filled from the chart (and still editable), plus a live computed preview.
+- **Entry** — a spreadsheet row in the source workbook's own column order. You fill date,
+  crusher, pass type, quantity and vehicle; the four rate cells autopopulate from the rate
+  chart and stay editable, and the right-hand cells compute live. Each added row stacks
+  directly above the entry row, so the sheet fills up as you work. Built for tablet and
+  laptop, but the grid scrolls sideways inside its own box so it still works on a phone.
 - **Ledger** — date-range filter defaulting to the last 5 *active* days, rows grouped by
   date with day subtotals, tap through to a full breakdown, edit or delete with undo.
-- **Reports** — daily summary, vehicle rent by date, crusher-wise all-time, monthly.
+- **Reports** — daily summary, vehicle rent by date, crusher-wise all-time, monthly, plus
+  **Print / PDF**: pick which sections to include and the browser's print dialog does the
+  rest (each section starts on its own page).
 - **Settings** — editable rate chart and vehicle list, discount rate, `.xlsx` export,
   JSON backup, merge-import deduped by row `id`, and erase-all behind a confirm.
 
-Verified by 115 unit tests and 22 Playwright tests, including the golden-totals contract,
+Verified by 116 unit tests and 40 Playwright tests, including the golden-totals contract,
 an export→wipe→import round trip, a double-import producing zero duplicates, and the
 service worker serving the app shell offline.
 

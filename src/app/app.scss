@@ -12,8 +12,11 @@
   display: flex;
   align-items: center;
   gap: 0.9rem;
-  height: 72px;
-  padding: 0 1.5rem;
+  // Static height so the shell never reflows as content changes.
+  height: 64px;
+  min-height: 64px;
+  flex: 0 0 64px;
+  padding: 0 1.25rem;
   background: var(--nav-bg);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);

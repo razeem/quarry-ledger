@@ -29,7 +29,9 @@ html {
   --transition: 0.25s ease;
   --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
   --app-gap: 1.5rem;
-  --app-page-max: 1180px;
+  // Generous enough that the report and settings tables use a wide screen; the
+  // entry sheet opts out entirely via `.app-page--wide`.
+  --app-page-max: 1480px;
 }
 
 // ---- Theme token sets (light default, dark via media + explicit [data-theme]) ----
@@ -174,12 +176,23 @@ body::before {
 }
 
 // Standard centered page wrapper used by every feature.
+//
+// The shell's sidenav is in `side` mode, so `mat-sidenav-content` already widens
+// when the rail collapses; the cap below is what decides how much of that a page
+// takes. Reading-oriented pages stay capped for line length; data-dense pages
+// opt into `--wide` and use everything available.
 .app-page {
   position: relative;
   z-index: 1;
   max-width: var(--app-page-max);
   margin: 0 auto;
   padding: 1.9rem 1.5rem 3rem;
+}
+
+// Full-bleed variant for the wide tables (the entry sheet), so collapsing the
+// sidebar genuinely buys more columns.
+.app-page--wide {
+  max-width: none;
 }
 
 // "Data console" numerals — mono + tabular so figures line up in columns/tiles.
@@ -294,4 +307,159 @@ body::before {
   text-align: center;
   color: var(--text-soft);
   font-size: 0.9rem;
+}
+
+// ---- Print / save-as-PDF ----
+// The reports build a `.report-print` block containing only the sections the user
+// ticked. On screen it is hidden; when printing, the app shell and the interactive
+// report UI (`.no-print`) are removed and the print block takes the page.
+//
+// These rules must be global: the top bar and sidenav live outside the reports
+// component, so a component-scoped stylesheet could not hide them.
+
+.report-print {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    height: auto;
+    background: #fff;
+    color: #000;
+  }
+
+  // The ambient gradient would waste a whole cartridge.
+  body::before {
+    display: none !important;
+  }
+
+  .topbar,
+  .app-sidenav,
+  mat-sidenav,
+  .mat-drawer-backdrop,
+  .no-print {
+    display: none !important;
+  }
+
+  // Unwrap the shell so the print block is not clipped or offset by the drawer.
+  mat-sidenav-container,
+  mat-sidenav-content,
+  .app-shell,
+  .app-content,
+  .app-page {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    transform: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .report-print {
+    display: block !important;
+    color: #000;
+    background: #fff;
+    font-size: 10.5pt;
+  }
+
+  .print-title {
+    margin: 0 0 0.2rem;
+    font-size: 16pt;
+    font-weight: 800;
+  }
+
+  .print-meta {
+    margin: 0 0 1.1rem;
+    font-size: 9pt;
+    color: #444;
+  }
+
+  // Each report starts on its own page — that is how they get filed and handed over.
+  .print-section + .print-section {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .print-section__title {
+    margin: 0 0 0.15rem;
+    padding-bottom: 0.15rem;
+    font-size: 12pt;
+    font-weight: 700;
+    border-bottom: 1.5pt solid #000;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .print-section__sub {
+    margin: 0.25rem 0 0.55rem;
+    font-size: 9pt;
+    color: #444;
+  }
+
+  // Compact key/value grid for the daily totals.
+  .print-kv {
+    display: grid;
+    grid-template-columns: auto auto auto auto auto auto;
+    gap: 2pt 16pt;
+    margin: 0 0 0.7rem;
+    font-size: 9.5pt;
+
+    dt {
+      color: #444;
+    }
+    dd {
+      margin: 0;
+      font-weight: 700;
+    }
+  }
+
+  .print-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5pt;
+
+    th,
+    td {
+      border: 0.5pt solid #999;
+      padding: 3pt 5pt;
+      text-align: right;
+      white-space: nowrap;
+    }
+    th:first-child,
+    td:first-child {
+      text-align: left;
+      white-space: normal;
+    }
+    // Repeat the header row when a long table spans pages.
+    thead {
+      display: table-header-group;
+    }
+    thead th {
+      background: #eee;
+      font-weight: 700;
+    }
+    tfoot td {
+      font-weight: 700;
+      background: #f4f4f4;
+    }
+    tr {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+  }
+
+  .print-empty {
+    margin: 0.3rem 0 0;
+    font-size: 9pt;
+    font-style: italic;
+    color: #555;
+  }
+
+  @page {
+    margin: 14mm;
+  }
 }

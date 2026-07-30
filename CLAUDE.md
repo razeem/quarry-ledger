@@ -80,19 +80,43 @@ src/app/features/      one folder per tab: entry, ledger, reports, settings.
   (`ledger-store.ts`) and `KNOWN_COLLECTIONS` (`transfer.model.ts`), or it will not
   round-trip through a transfer.
 
-## Two traps worth remembering
+## Traps worth remembering
+
+Each of these was a real bug caught by the test suite, not a hypothetical.
 
 - **Wait for `store.initialised()`, never `store.ready()`, before deriving a default from
   the rows.** On a fresh device every collection hydrates to its empty default almost
   instantly, so `ready()` is true well before the first-run seed lands — a feature seeding
   a date filter off `ready()` latches onto an empty row set. `initialised()` means
   "hydrated *and* seeded".
-- **Row writes must be durable before you confirm them.** `StorageService` debounces writes
+- **Every write must be durable before you confirm it.** `StorageService` debounces writes
   250 ms; entering a load and immediately navigating (or Android killing a backgrounded
-  PWA) would drop it. `LedgerStore.addRow` / `updateRow` / `deleteRow` are `async` and
-  resolve only once the write has landed — always await them before showing a toast,
-  resetting the form, or navigating. Losing entered data is the exact failure this app
-  exists to prevent.
+  PWA) would drop it. So **all** `LedgerStore` mutators — rows *and* reference data *and*
+  the seed itself — are `async` and resolve only once the write has landed. Always await
+  them before showing a toast, resetting a form, or navigating. Losing entered data is the
+  exact failure this app exists to prevent.
+  - The seed flushes too: without it, navigating within 250 ms of a first load lost the
+    `seeded` flag, re-ran the seed, and overwrote a rate the user had just edited.
+- **An async default must not clobber a user action.** The Ledger's default date range is
+  applied after seeding, so it tracks `rangeTouched` and backs off if the user has already
+  changed the filter. Any "apply a default once loaded" effect needs the same guard.
+- **Don't let the bundler constant-fold a float in a test.** `2.3 * 650` is evaluated at
+  build time, hiding the IEEE-754 shortfall the test exists to prove; route it through
+  `Number('2.3')`.
+
+## Rates and the chart
+
+- The rate chart autopopulates **all four** rate cells — quary, crusher, rent and comm.
+  `comm` is a per-entry column (v2) because several crushers genuinely run at ₹0; when an
+  entry has no `comm` (a v1 chart or an older import) it falls back to the global
+  `discountRatePerTon`. It is only a default: `AVK Pass` and `MR Granites Pass` have
+  historically used both ₹0 and ₹20, so the row's own snapshot always wins.
+- On the entry sheet, a rate cell is badged `auto` (from the chart), `saved` (an existing
+  row's snapshot) or `edited` (typed over). Saved rows above the entry row highlight any
+  rate that no longer matches the chart — which means "differs from today's chart", since
+  a row does not record whether it was typed over or the chart changed later.
+- The `item` column is hidden (one commodity these days) and every row saves as `Rock`.
+  The field stays on `LedgerRow`, so restoring the column is a UI-only change.
 
 ## Commands
 

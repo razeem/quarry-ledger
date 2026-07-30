@@ -48,9 +48,10 @@ export function ratePrefill(
     quaryRate: entry.quary,
     crusherRate: entry.crusherRate,
     rentRate: entry.rent,
-    // Rent-free crushers (own / crusher-supplied vehicles) still attract commission;
-    // the chart carries no commission column, so it comes from the global setting.
-    commRate: discountRatePerTon,
+    // The chart's own commission wins when it has one — several crushers run at ₹0.
+    // Charts predating the column (or imported from an older export) fall back to
+    // the global setting.
+    commRate: entry.comm ?? discountRatePerTon,
   };
 }
 

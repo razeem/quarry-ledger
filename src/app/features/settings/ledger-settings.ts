@@ -37,6 +37,13 @@ export class LedgerSettingsPage {
   protected readonly busy = signal(false);
   /** Two-step confirmation for the destructive erase. */
   protected readonly confirmingErase = signal(false);
+  /**
+   * Briefly true after a reference-data edit has landed on disk. Editing a rate
+   * table with no feedback leaves people unsure whether it stuck, and the writes
+   * here are durable-on-write, so it is a promise we can actually make.
+   */
+  protected readonly justSaved = signal(false);
+  private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly counts = computed(() => ({
     rows: this.store.rows().length,
@@ -44,12 +51,20 @@ export class LedgerSettingsPage {
     vehicles: this.store.vehicles().length,
   }));
 
+  /** Run a persisting edit, then flag it as saved once it is on disk. */
+  private async persist(write: () => Promise<void>): Promise<void> {
+    await write();
+    if (this.savedTimer) clearTimeout(this.savedTimer);
+    this.justSaved.set(true);
+    this.savedTimer = setTimeout(() => this.justSaved.set(false), 2000);
+  }
+
   // --- Discount rate -------------------------------------------------------
 
   protected setDiscountRate(value: number | string): void {
     const rate = Number(value);
     if (!Number.isFinite(rate) || rate < 0) return;
-    this.store.setDiscountRate(rate);
+    void this.persist(() => this.store.setDiscountRate(rate));
   }
 
   // --- Rate chart ----------------------------------------------------------
@@ -58,18 +73,29 @@ export class LedgerSettingsPage {
     const entries = this.rateChart().map((entry, at) =>
       at === index ? { ...entry, ...patch } : entry,
     );
-    this.store.saveRateChart(entries);
+    void this.persist(() => this.store.saveRateChart(entries));
   }
 
   protected addRate(): void {
-    this.store.saveRateChart([
-      ...this.rateChart(),
-      { crusher: '', type: 'Pass' as PassType, quary: 0, rent: 0, crusherRate: 0 },
-    ]);
+    void this.persist(() =>
+      this.store.saveRateChart([
+        ...this.rateChart(),
+        {
+          crusher: '',
+          type: 'Pass' as PassType,
+          quary: 0,
+          rent: 0,
+          crusherRate: 0,
+          comm: this.discountRate(),
+        },
+      ]),
+    );
   }
 
   protected removeRate(index: number): void {
-    this.store.saveRateChart(this.rateChart().filter((_, at) => at !== index));
+    void this.persist(() =>
+      this.store.saveRateChart(this.rateChart().filter((_, at) => at !== index)),
+    );
   }
 
   // --- Vehicles ------------------------------------------------------------
@@ -78,15 +104,17 @@ export class LedgerSettingsPage {
     const list = this.vehicles().map((vehicle, at) =>
       at === index ? { ...vehicle, ...patch } : vehicle,
     );
-    this.store.saveVehicles(list);
+    void this.persist(() => this.store.saveVehicles(list));
   }
 
   protected addVehicle(): void {
-    this.store.saveVehicles([...this.vehicles(), { num: '', owner: '' }]);
+    void this.persist(() => this.store.saveVehicles([...this.vehicles(), { num: '', owner: '' }]));
   }
 
   protected removeVehicle(index: number): void {
-    this.store.saveVehicles(this.vehicles().filter((_, at) => at !== index));
+    void this.persist(() =>
+      this.store.saveVehicles(this.vehicles().filter((_, at) => at !== index)),
+    );
   }
 
   // --- Export --------------------------------------------------------------

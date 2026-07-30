@@ -56,6 +56,15 @@ export interface RateChartEntry {
   rent: number;
   /** ₹/ton charged to the crusher. */
   crusherRate: number;
+  /**
+   * ₹/ton monthly commission to pre-fill. Optional: when absent (an older chart or
+   * an import from one), the global `discountRatePerTon` is used instead.
+   *
+   * Per-entry rather than global because several crushers run at ₹0 — but note it
+   * is only a default, since a couple of crusher/pass combinations have
+   * historically used both ₹0 and ₹20, so the row's own value always wins.
+   */
+  comm?: number;
 }
 
 /** A vehicle registration and its owner. Lookup is an exact string match. */

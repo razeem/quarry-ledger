@@ -1,11 +1,24 @@
 <div class="app-page">
   <app-page-header
+    class="no-print"
     title="Reports"
     subtitle="Computed from the ledger rows every time — nothing is stored."
     icon="insights"
-  />
+  >
+    <button
+      actions
+      mat-stroked-button
+      type="button"
+      [disabled]="!ready()"
+      (click)="print()"
+      data-testid="reports-print"
+    >
+      <mat-icon>print</mat-icon>
+      Print / PDF
+    </button>
+  </app-page-header>
 
-  <div class="overflow-x-auto mb-4 -mx-1 px-1">
+  <div class="no-print overflow-x-auto mb-4 -mx-1 px-1">
     <mat-button-toggle-group
       [value]="view()"
       (change)="view.set($event.value)"
@@ -26,73 +39,189 @@
   </div>
 
   @if (!ready()) {
-    <p class="app-empty">Loading reports…</p>
+    <p class="app-empty no-print">Loading reports…</p>
   } @else {
-    @switch (view()) {
-      <!-- ---------- Daily summary ---------- -->
-      @case ('daily') {
-        <div class="flex flex-col gap-4">
-          <app-section-card title="Pick a date" icon="event">
-            <label class="app-label" for="reports-date">Date</label>
-            <input
-              id="reports-date"
-              class="app-field"
-              type="date"
-              [ngModel]="date()"
-              (ngModelChange)="date.set($event)"
-              name="date"
-              data-testid="reports-date"
-            />
-            @if (datesWithRows().length) {
-              <p class="text-xs text-[var(--text-soft)] mt-2 mb-0">
-                Most recent day with loads: {{ datesWithRows()[0] }}
-              </p>
-            }
-          </app-section-card>
+    <div class="no-print">
+      @switch (view()) {
+        <!-- ---------- Daily summary ---------- -->
+        @case ('daily') {
+          <div class="flex flex-col gap-4">
+            <app-section-card title="Pick a date" icon="event">
+              <label class="app-label" for="reports-date">Date</label>
+              <input
+                id="reports-date"
+                class="app-field"
+                type="date"
+                [ngModel]="date()"
+                (ngModelChange)="date.set($event)"
+                name="date"
+                data-testid="reports-date"
+              />
+              @if (datesWithRows().length) {
+                <p class="text-xs text-[var(--text-soft)] mt-2 mb-0">
+                  Most recent day with loads: {{ datesWithRows()[0] }}
+                </p>
+              }
+            </app-section-card>
 
-          <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
-            <app-stat-tile
-              label="Loads"
-              [value]="daily().totals.loads.toString()"
-              icon="local_shipping"
-              tone="accent"
-            />
-            <app-stat-tile label="Quantity" [value]="tons(daily().totals.qty)" icon="scale" />
-            <app-stat-tile
-              label="Crusher amount"
-              [value]="inr(daily().totals.crusherAmount)"
-              icon="call_received"
-            />
-            <app-stat-tile
-              label="Quary amount"
-              [value]="inr(daily().totals.quaryAmount)"
-              icon="call_made"
-            />
-            <app-stat-tile
-              label="Vehicle rent"
-              [value]="inr(daily().totals.vehicleRent)"
-              icon="local_shipping"
-            />
-            <app-stat-tile
-              label="Profit"
-              [value]="inr(daily().totals.profit)"
-              icon="trending_up"
-              [tone]="daily().totals.profit < 0 ? 'negative' : 'positive'"
-            />
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3">
+              <app-stat-tile
+                label="Loads"
+                [value]="daily().totals.loads.toString()"
+                icon="local_shipping"
+                tone="accent"
+              />
+              <app-stat-tile label="Quantity" [value]="tons(daily().totals.qty)" icon="scale" />
+              <app-stat-tile
+                label="Crusher amount"
+                [value]="inr(daily().totals.crusherAmount)"
+                icon="call_received"
+              />
+              <app-stat-tile
+                label="Quary amount"
+                [value]="inr(daily().totals.quaryAmount)"
+                icon="call_made"
+              />
+              <app-stat-tile
+                label="Vehicle rent"
+                [value]="inr(daily().totals.vehicleRent)"
+                icon="local_shipping"
+              />
+              <app-stat-tile
+                label="Profit"
+                [value]="inr(daily().totals.profit)"
+                icon="trending_up"
+                [tone]="daily().totals.profit < 0 ? 'negative' : 'positive'"
+              />
+            </div>
+
+            <app-section-card
+              [title]="'Per crusher · ' + daily().label"
+              icon="factory"
+              [subtitle]="
+                'Pass ' + tons(daily().totals.passQty) + ' · WO Pass ' + tons(daily().totals.woQty)
+              "
+            >
+              @if (daily().crushers.length === 0) {
+                <p class="app-empty" data-testid="daily-empty">No loads on this date.</p>
+              } @else {
+                <div class="overflow-x-auto -mx-1 px-1">
+                  <table class="app-table" data-testid="daily-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Crusher</th>
+                        <th scope="col" class="app-num">Loads</th>
+                        <th scope="col" class="app-num">Qty</th>
+                        <th scope="col" class="app-num">Crusher ₹</th>
+                        <th scope="col" class="app-num">Quary ₹</th>
+                        <th scope="col" class="app-num">Profit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (item of daily().crushers; track item.crusher) {
+                        <tr>
+                          <td>{{ item.crusher }}</td>
+                          <td class="app-num">{{ item.summary.loads }}</td>
+                          <td class="app-num">{{ tons(item.summary.qty) }}</td>
+                          <td class="app-num">{{ inr(item.summary.crusherAmount) }}</td>
+                          <td class="app-num">{{ inr(item.summary.quaryAmount) }}</td>
+                          <td class="app-num">{{ inr(item.summary.profit) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td>Total</td>
+                        <td class="app-num">{{ daily().totals.loads }}</td>
+                        <td class="app-num">{{ tons(daily().totals.qty) }}</td>
+                        <td class="app-num">{{ inr(daily().totals.crusherAmount) }}</td>
+                        <td class="app-num">{{ inr(daily().totals.quaryAmount) }}</td>
+                        <td class="app-num">{{ inr(daily().totals.profit) }}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              }
+            </app-section-card>
           </div>
+        }
 
+        <!-- ---------- Vehicle rent by date ---------- -->
+        @case ('rent') {
+          <div class="flex flex-col gap-4">
+            <app-section-card title="Pick a date" icon="event">
+              <label class="app-label" for="rent-date">Date</label>
+              <input
+                id="rent-date"
+                class="app-field"
+                type="date"
+                [ngModel]="date()"
+                (ngModelChange)="date.set($event)"
+                name="rentDate"
+                data-testid="rent-date"
+              />
+            </app-section-card>
+
+            <app-section-card
+              [title]="'Vehicle rent · ' + rent().label"
+              icon="payments"
+              subtitle="Own and crusher-supplied vehicles carry no rent, so they are omitted."
+            >
+              @if (rent().rows.length === 0) {
+                <p class="app-empty" data-testid="rent-empty">No rented vehicles on this date.</p>
+              } @else {
+                <div class="overflow-x-auto -mx-1 px-1">
+                  <table class="app-table" data-testid="rent-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Vehicle</th>
+                        <th scope="col">Owner</th>
+                        <th scope="col" class="app-num">Trips</th>
+                        <th scope="col" class="app-num">Qty</th>
+                        <th scope="col" class="app-num">Rent</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (row of rent().rows; track row.vehicle) {
+                        <tr>
+                          <td>{{ row.vehicle }}</td>
+                          <td>{{ row.owner || '—' }}</td>
+                          <td class="app-num">{{ row.trips }}</td>
+                          <td class="app-num">{{ tons(row.qty) }}</td>
+                          <td class="app-num">{{ inr(row.rent) }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <td>Total</td>
+                        <td></td>
+                        <td class="app-num">{{ rent().totals.trips }}</td>
+                        <td class="app-num">{{ tons(rent().totals.qty) }}</td>
+                        <td class="app-num" data-testid="rent-total">
+                          {{ inr(rent().totals.rent) }}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              }
+            </app-section-card>
+          </div>
+        }
+
+        <!-- ---------- Crusher-wise, all time ---------- -->
+        @case ('crusher') {
           <app-section-card
-            [title]="'Per crusher · ' + daily().label"
+            title="Crusher-wise · all time"
             icon="factory"
-            [subtitle]="
-              'Pass ' + tons(daily().totals.passQty) + ' · WO Pass ' + tons(daily().totals.woQty)
-            "
+            subtitle="Most profitable first."
           >
-            @if (daily().crushers.length === 0) {
-              <p class="app-empty" data-testid="daily-empty">No loads on this date.</p>
+            @if (crushers().length === 0) {
+              <p class="app-empty" data-testid="crusher-empty">No loads on record yet.</p>
             } @else {
               <div class="overflow-x-auto -mx-1 px-1">
-                <table class="app-table" data-testid="daily-table">
+                <table class="app-table" data-testid="crusher-table">
                   <thead>
                     <tr>
                       <th scope="col">Crusher</th>
@@ -100,92 +229,33 @@
                       <th scope="col" class="app-num">Qty</th>
                       <th scope="col" class="app-num">Crusher ₹</th>
                       <th scope="col" class="app-num">Quary ₹</th>
+                      <th scope="col" class="app-num">Rent</th>
                       <th scope="col" class="app-num">Profit</th>
                     </tr>
                   </thead>
                   <tbody>
-                    @for (item of daily().crushers; track item.crusher) {
+                    @for (row of crushers(); track row.crusher) {
                       <tr>
-                        <td>{{ item.crusher }}</td>
-                        <td class="app-num">{{ item.summary.loads }}</td>
-                        <td class="app-num">{{ tons(item.summary.qty) }}</td>
-                        <td class="app-num">{{ inr(item.summary.crusherAmount) }}</td>
-                        <td class="app-num">{{ inr(item.summary.quaryAmount) }}</td>
-                        <td class="app-num">{{ inr(item.summary.profit) }}</td>
-                      </tr>
-                    }
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <td>Total</td>
-                      <td class="app-num">{{ daily().totals.loads }}</td>
-                      <td class="app-num">{{ tons(daily().totals.qty) }}</td>
-                      <td class="app-num">{{ inr(daily().totals.crusherAmount) }}</td>
-                      <td class="app-num">{{ inr(daily().totals.quaryAmount) }}</td>
-                      <td class="app-num">{{ inr(daily().totals.profit) }}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            }
-          </app-section-card>
-        </div>
-      }
-
-      <!-- ---------- Vehicle rent by date ---------- -->
-      @case ('rent') {
-        <div class="flex flex-col gap-4">
-          <app-section-card title="Pick a date" icon="event">
-            <label class="app-label" for="rent-date">Date</label>
-            <input
-              id="rent-date"
-              class="app-field"
-              type="date"
-              [ngModel]="date()"
-              (ngModelChange)="date.set($event)"
-              name="rentDate"
-              data-testid="rent-date"
-            />
-          </app-section-card>
-
-          <app-section-card
-            [title]="'Vehicle rent · ' + rent().label"
-            icon="payments"
-            subtitle="Own and crusher-supplied vehicles carry no rent, so they are omitted."
-          >
-            @if (rent().rows.length === 0) {
-              <p class="app-empty" data-testid="rent-empty">No rented vehicles on this date.</p>
-            } @else {
-              <div class="overflow-x-auto -mx-1 px-1">
-                <table class="app-table" data-testid="rent-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Vehicle</th>
-                      <th scope="col">Owner</th>
-                      <th scope="col" class="app-num">Trips</th>
-                      <th scope="col" class="app-num">Qty</th>
-                      <th scope="col" class="app-num">Rent</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (row of rent().rows; track row.vehicle) {
-                      <tr>
-                        <td>{{ row.vehicle }}</td>
-                        <td>{{ row.owner || '—' }}</td>
-                        <td class="app-num">{{ row.trips }}</td>
+                        <td>{{ row.crusher }}</td>
+                        <td class="app-num">{{ row.loads }}</td>
                         <td class="app-num">{{ tons(row.qty) }}</td>
-                        <td class="app-num">{{ inr(row.rent) }}</td>
+                        <td class="app-num">{{ inr(row.crusherAmount) }}</td>
+                        <td class="app-num">{{ inr(row.quaryAmount) }}</td>
+                        <td class="app-num">{{ inr(row.vehicleRent) }}</td>
+                        <td class="app-num">{{ inr(row.profit) }}</td>
                       </tr>
                     }
                   </tbody>
                   <tfoot>
                     <tr>
                       <td>Total</td>
-                      <td></td>
-                      <td class="app-num">{{ rent().totals.trips }}</td>
-                      <td class="app-num">{{ tons(rent().totals.qty) }}</td>
-                      <td class="app-num" data-testid="rent-total">
-                        {{ inr(rent().totals.rent) }}
+                      <td class="app-num"></td>
+                      <td class="app-num">{{ tons(crusherTotals().qty) }}</td>
+                      <td class="app-num">{{ inr(crusherTotals().crusherAmount) }}</td>
+                      <td class="app-num">{{ inr(crusherTotals().quaryAmount) }}</td>
+                      <td class="app-num">{{ inr(crusherTotals().vehicleRent) }}</td>
+                      <td class="app-num" data-testid="crusher-total-profit">
+                        {{ inr(crusherTotals().profit) }}
                       </td>
                     </tr>
                   </tfoot>
@@ -193,115 +263,290 @@
               </div>
             }
           </app-section-card>
-        </div>
-      }
+        }
 
-      <!-- ---------- Crusher-wise, all time ---------- -->
-      @case ('crusher') {
-        <app-section-card
-          title="Crusher-wise · all time"
-          icon="factory"
-          subtitle="Most profitable first."
-        >
-          @if (crushers().length === 0) {
-            <p class="app-empty" data-testid="crusher-empty">No loads on record yet.</p>
-          } @else {
-            <div class="overflow-x-auto -mx-1 px-1">
-              <table class="app-table" data-testid="crusher-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Crusher</th>
-                    <th scope="col" class="app-num">Loads</th>
-                    <th scope="col" class="app-num">Qty</th>
-                    <th scope="col" class="app-num">Crusher ₹</th>
-                    <th scope="col" class="app-num">Quary ₹</th>
-                    <th scope="col" class="app-num">Rent</th>
-                    <th scope="col" class="app-num">Profit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of crushers(); track row.crusher) {
+        <!-- ---------- Monthly ---------- -->
+        @case ('monthly') {
+          <app-section-card
+            title="Monthly"
+            icon="calendar_month"
+            subtitle="Discount is the monthly commission on qualifying loads."
+          >
+            @if (months().length === 0) {
+              <p class="app-empty" data-testid="monthly-empty">No loads on record yet.</p>
+            } @else {
+              <div class="overflow-x-auto -mx-1 px-1">
+                <table class="app-table" data-testid="monthly-table">
+                  <thead>
                     <tr>
-                      <td>{{ row.crusher }}</td>
-                      <td class="app-num">{{ row.loads }}</td>
-                      <td class="app-num">{{ tons(row.qty) }}</td>
-                      <td class="app-num">{{ inr(row.crusherAmount) }}</td>
-                      <td class="app-num">{{ inr(row.quaryAmount) }}</td>
-                      <td class="app-num">{{ inr(row.vehicleRent) }}</td>
-                      <td class="app-num">{{ inr(row.profit) }}</td>
+                      <th scope="col">Month</th>
+                      <th scope="col" class="app-num">Loads</th>
+                      <th scope="col" class="app-num">Qty</th>
+                      <th scope="col" class="app-num">Discount qty</th>
+                      <th scope="col" class="app-num">Discount ₹</th>
+                      <th scope="col" class="app-num">Profit</th>
                     </tr>
-                  }
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>Total</td>
-                    <td class="app-num"></td>
-                    <td class="app-num">{{ tons(crusherTotals().qty) }}</td>
-                    <td class="app-num">{{ inr(crusherTotals().crusherAmount) }}</td>
-                    <td class="app-num">{{ inr(crusherTotals().quaryAmount) }}</td>
-                    <td class="app-num">{{ inr(crusherTotals().vehicleRent) }}</td>
-                    <td class="app-num" data-testid="crusher-total-profit">
-                      {{ inr(crusherTotals().profit) }}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          }
-        </app-section-card>
-      }
-
-      <!-- ---------- Monthly ---------- -->
-      @case ('monthly') {
-        <app-section-card
-          title="Monthly"
-          icon="calendar_month"
-          subtitle="Discount is the monthly commission on qualifying loads."
-        >
-          @if (months().length === 0) {
-            <p class="app-empty" data-testid="monthly-empty">No loads on record yet.</p>
-          } @else {
-            <div class="overflow-x-auto -mx-1 px-1">
-              <table class="app-table" data-testid="monthly-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Month</th>
-                    <th scope="col" class="app-num">Loads</th>
-                    <th scope="col" class="app-num">Qty</th>
-                    <th scope="col" class="app-num">Discount qty</th>
-                    <th scope="col" class="app-num">Discount ₹</th>
-                    <th scope="col" class="app-num">Profit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of months(); track row.month) {
+                  </thead>
+                  <tbody>
+                    @for (row of months(); track row.month) {
+                      <tr>
+                        <td>{{ month(row.month) }}</td>
+                        <td class="app-num">{{ row.loads }}</td>
+                        <td class="app-num">{{ tons(row.qty) }}</td>
+                        <td class="app-num">{{ tons(row.discountQty) }}</td>
+                        <td class="app-num">{{ inr(row.discount) }}</td>
+                        <td class="app-num">{{ inr(row.profit) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot>
                     <tr>
-                      <td>{{ month(row.month) }}</td>
-                      <td class="app-num">{{ row.loads }}</td>
-                      <td class="app-num">{{ tons(row.qty) }}</td>
-                      <td class="app-num">{{ tons(row.discountQty) }}</td>
-                      <td class="app-num">{{ inr(row.discount) }}</td>
-                      <td class="app-num">{{ inr(row.profit) }}</td>
+                      <td>Total</td>
+                      <td class="app-num"></td>
+                      <td class="app-num">{{ tons(monthlyTotals().qty) }}</td>
+                      <td class="app-num">{{ tons(monthlyTotals().discountQty) }}</td>
+                      <td class="app-num" data-testid="monthly-total-discount">
+                        {{ inr(monthlyTotals().discount) }}
+                      </td>
+                      <td class="app-num">{{ inr(monthlyTotals().profit) }}</td>
                     </tr>
-                  }
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td>Total</td>
-                    <td class="app-num"></td>
-                    <td class="app-num">{{ tons(monthlyTotals().qty) }}</td>
-                    <td class="app-num">{{ tons(monthlyTotals().discountQty) }}</td>
-                    <td class="app-num" data-testid="monthly-total-discount">
-                      {{ inr(monthlyTotals().discount) }}
-                    </td>
-                    <td class="app-num">{{ inr(monthlyTotals().profit) }}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          }
-        </app-section-card>
+                  </tfoot>
+                </table>
+              </div>
+            }
+          </app-section-card>
+        }
       }
-    }
+    </div>
   }
+
+  <!--
+    Print / save-as-PDF output. Hidden on screen, revealed by the global @media
+    print rules, and containing only the sections ticked in the print dialog.
+    Every figure comes from the same computeds the on-screen reports use.
+  -->
+  <div class="report-print" data-testid="report-print">
+    <h1 class="print-title">Quarry Ledger</h1>
+    <p class="print-meta">
+      @if (printedAt()) {
+        Generated {{ printedAt() }} ·
+      }
+      {{ tons(crusherTotals().qty) }} across {{ months().length }} month{{
+        months().length === 1 ? '' : 's'
+      }}
+      on record
+    </p>
+
+    <!-- ---------- Daily summary ---------- -->
+    @if (includesSection('daily')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Daily summary — {{ dateLabel() }}</h2>
+
+        <dl class="print-kv">
+          <dt>Loads</dt>
+          <dd>{{ daily().totals.loads }}</dd>
+          <dt>Quantity</dt>
+          <dd>{{ tons(daily().totals.qty) }}</dd>
+          <dt>Profit</dt>
+          <dd>{{ inr(daily().totals.profit) }}</dd>
+          <dt>Crusher amount</dt>
+          <dd>{{ inr(daily().totals.crusherAmount) }}</dd>
+          <dt>Quary amount</dt>
+          <dd>{{ inr(daily().totals.quaryAmount) }}</dd>
+          <dt>Vehicle rent</dt>
+          <dd>{{ inr(daily().totals.vehicleRent) }}</dd>
+          <dt>Pass qty</dt>
+          <dd>{{ tons(daily().totals.passQty) }}</dd>
+          <dt>WO Pass qty</dt>
+          <dd>{{ tons(daily().totals.woQty) }}</dd>
+          <dt>Discount</dt>
+          <dd>{{ inr(daily().totals.discount) }}</dd>
+        </dl>
+
+        @if (daily().crushers.length === 0) {
+          <p class="print-empty">No loads on this date.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Crusher</th>
+                <th scope="col">Loads</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Crusher ₹</th>
+                <th scope="col">Quary ₹</th>
+                <th scope="col">Rent</th>
+                <th scope="col">Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (item of daily().crushers; track item.crusher) {
+                <tr>
+                  <td>{{ item.crusher }}</td>
+                  <td>{{ item.summary.loads }}</td>
+                  <td>{{ tons(item.summary.qty) }}</td>
+                  <td>{{ inr(item.summary.crusherAmount) }}</td>
+                  <td>{{ inr(item.summary.quaryAmount) }}</td>
+                  <td>{{ inr(item.summary.vehicleRent) }}</td>
+                  <td>{{ inr(item.summary.profit) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td>{{ daily().totals.loads }}</td>
+                <td>{{ tons(daily().totals.qty) }}</td>
+                <td>{{ inr(daily().totals.crusherAmount) }}</td>
+                <td>{{ inr(daily().totals.quaryAmount) }}</td>
+                <td>{{ inr(daily().totals.vehicleRent) }}</td>
+                <td>{{ inr(daily().totals.profit) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+
+    <!-- ---------- Vehicle rent ---------- -->
+    @if (includesSection('rent')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Vehicle rent — {{ dateLabel() }}</h2>
+        <p class="print-section__sub">
+          Own and crusher-supplied vehicles carry no rent and are omitted.
+        </p>
+
+        @if (rent().rows.length === 0) {
+          <p class="print-empty">No rented vehicles on this date.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Vehicle</th>
+                <th scope="col">Owner</th>
+                <th scope="col">Trips</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Rent</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rent().rows; track row.vehicle) {
+                <tr>
+                  <td>{{ row.vehicle }}</td>
+                  <td>{{ row.owner || '—' }}</td>
+                  <td>{{ row.trips }}</td>
+                  <td>{{ tons(row.qty) }}</td>
+                  <td>{{ inr(row.rent) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td></td>
+                <td>{{ rent().totals.trips }}</td>
+                <td>{{ tons(rent().totals.qty) }}</td>
+                <td>{{ inr(rent().totals.rent) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+
+    <!-- ---------- Crusher-wise ---------- -->
+    @if (includesSection('crusher')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Crusher-wise — all time</h2>
+
+        @if (crushers().length === 0) {
+          <p class="print-empty">No loads on record.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Crusher</th>
+                <th scope="col">Loads</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Crusher ₹</th>
+                <th scope="col">Quary ₹</th>
+                <th scope="col">Rent</th>
+                <th scope="col">Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of crushers(); track row.crusher) {
+                <tr>
+                  <td>{{ row.crusher }}</td>
+                  <td>{{ row.loads }}</td>
+                  <td>{{ tons(row.qty) }}</td>
+                  <td>{{ inr(row.crusherAmount) }}</td>
+                  <td>{{ inr(row.quaryAmount) }}</td>
+                  <td>{{ inr(row.vehicleRent) }}</td>
+                  <td>{{ inr(row.profit) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td></td>
+                <td>{{ tons(crusherTotals().qty) }}</td>
+                <td>{{ inr(crusherTotals().crusherAmount) }}</td>
+                <td>{{ inr(crusherTotals().quaryAmount) }}</td>
+                <td>{{ inr(crusherTotals().vehicleRent) }}</td>
+                <td>{{ inr(crusherTotals().profit) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+
+    <!-- ---------- Monthly ---------- -->
+    @if (includesSection('monthly')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Monthly</h2>
+        <p class="print-section__sub">Discount is the monthly commission on qualifying loads.</p>
+
+        @if (months().length === 0) {
+          <p class="print-empty">No loads on record.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Month</th>
+                <th scope="col">Loads</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Discount qty</th>
+                <th scope="col">Discount ₹</th>
+                <th scope="col">Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of months(); track row.month) {
+                <tr>
+                  <td>{{ month(row.month) }}</td>
+                  <td>{{ row.loads }}</td>
+                  <td>{{ tons(row.qty) }}</td>
+                  <td>{{ tons(row.discountQty) }}</td>
+                  <td>{{ inr(row.discount) }}</td>
+                  <td>{{ inr(row.profit) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td></td>
+                <td>{{ tons(monthlyTotals().qty) }}</td>
+                <td>{{ tons(monthlyTotals().discountQty) }}</td>
+                <td>{{ inr(monthlyTotals().discount) }}</td>
+                <td>{{ inr(monthlyTotals().profit) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+  </div>
 </div>

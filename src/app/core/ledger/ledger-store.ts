@@ -41,7 +41,7 @@ interface SeedDoc {
 
 export const COLLECTION_VERSIONS = {
   'ledger-rows': 1,
-  'rate-chart': 1,
+  'rate-chart': 2,
   vehicles: 1,
   'ledger-settings': 1,
   'ledger-seed': 1,
@@ -83,6 +83,9 @@ export class LedgerStore {
     key: 'rate-chart',
     version: COLLECTION_VERSIONS['rate-chart'],
     defaults: { entries: [] },
+    // v1 -> v2 added the per-entry `comm` column. It stays optional, and
+    // `ratePrefill` falls back to the global discount rate when it is missing, so
+    // a v1 document needs no value invented for it.
     migrate: (data) => ({ entries: (data as Partial<RateChartDoc>)?.entries ?? [] }),
   });
 
@@ -193,6 +196,12 @@ export class LedgerStore {
       this.rateChartStore.set({ entries: mergeRateChart(this.rateChart(), chart) });
       this.vehiclesStore.set({ list: mergeVehicles(this.vehicles(), vehicles) });
       this.seedStore.set({ seeded: true });
+
+      // Land the seed — including the `seeded` flag — before anything else can
+      // happen. Left debounced, navigating within 250ms of a first load would lose
+      // the flag, re-run the seed on the next page, and overwrite any rate the user
+      // had edited in between with the bundled value.
+      await this.flush();
     } catch (err) {
       console.error('[LedgerStore] Seeding from bundled data failed', err);
       // Leave `seeded` false so a later reload can retry.
@@ -251,17 +260,29 @@ export class LedgerStore {
 
   // --- Reference data ------------------------------------------------------
 
-  saveRateChart(entries: RateChartEntry[]): void {
-    // Rates are snapshots: existing rows keep the values they were entered with.
+  /**
+   * Replace the rate chart. Resolves once the change is on disk.
+   *
+   * Reference data is durable-on-write for the same reason rows are: editing a rate
+   * and immediately switching tabs would otherwise discard the debounced write.
+   *
+   * Rates are snapshots — existing rows keep the values they were entered with.
+   */
+  async saveRateChart(entries: RateChartEntry[]): Promise<void> {
     this.rateChartStore.set({ entries });
+    await this.rateChartStore.flush();
   }
 
-  saveVehicles(list: Vehicle[]): void {
+  /** Replace the vehicle list. Resolves once the change is on disk. */
+  async saveVehicles(list: Vehicle[]): Promise<void> {
     this.vehiclesStore.set({ list });
+    await this.vehiclesStore.flush();
   }
 
-  setDiscountRate(discountRatePerTon: number): void {
+  /** Set the global discount rate. Resolves once the change is on disk. */
+  async setDiscountRate(discountRatePerTon: number): Promise<void> {
     this.settingsStore.patch({ discountRatePerTon });
+    await this.settingsStore.flush();
   }
 
   // --- Backup / restore / merge -------------------------------------------
@@ -282,7 +303,7 @@ export class LedgerStore {
       this.vehiclesStore.set({ list: mergeVehicles(this.vehicles(), incoming.vehicles) });
     }
     if (incoming.settings?.discountRatePerTon != null) {
-      this.setDiscountRate(incoming.settings.discountRatePerTon);
+      void this.setDiscountRate(incoming.settings.discountRatePerTon);
     }
     // A restore counts as seeded, so the bundled seed never overwrites it.
     this.seedStore.set({ seeded: true });

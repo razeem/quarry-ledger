@@ -10,10 +10,26 @@ import {
 import type { LedgerRow, RateChartEntry, Vehicle } from './types';
 
 const CHART: RateChartEntry[] = [
-  { crusher: 'MR Granites', type: 'Pass', quary: 650, rent: 0, crusherRate: 675 },
+  // MR Granites Pass runs at zero commission; the WO Pass entry predates the
+  // `comm` column entirely, so it must fall back to the global discount rate.
+  { crusher: 'MR Granites', type: 'Pass', quary: 650, rent: 0, crusherRate: 675, comm: 0 },
   { crusher: 'MR Granites', type: 'WO Pass', quary: 610, rent: 0, crusherRate: 675 },
-  { crusher: 'Al Falah metal crusher', type: 'Pass', quary: 640, rent: 215, crusherRate: 870 },
-  { crusher: 'Al Falah metal crusher', type: 'WO Pass', quary: 610, rent: 215, crusherRate: 870 },
+  {
+    crusher: 'Al Falah metal crusher',
+    type: 'Pass',
+    quary: 640,
+    rent: 215,
+    crusherRate: 870,
+    comm: 20,
+  },
+  {
+    crusher: 'Al Falah metal crusher',
+    type: 'WO Pass',
+    quary: 610,
+    rent: 215,
+    crusherRate: 870,
+    comm: 20,
+  },
 ];
 
 function row(overrides: Partial<LedgerRow> = {}): LedgerRow {
@@ -64,8 +80,16 @@ describe('ratePrefill', () => {
     });
   });
 
-  it('takes commRate from the global setting, not the chart', () => {
-    expect(ratePrefill(CHART, 'MR Granites', 'Pass', 25)?.commRate).toBe(25);
+  it('takes commRate from the chart entry when it has one', () => {
+    // Several crushers genuinely run at zero commission — the chart, not the
+    // global rate, is what knows that.
+    expect(ratePrefill(CHART, 'MR Granites', 'Pass', 25)?.commRate).toBe(0);
+    expect(ratePrefill(CHART, 'Al Falah metal crusher', 'Pass', 25)?.commRate).toBe(20);
+  });
+
+  it('falls back to the global discount rate when the entry has no comm', () => {
+    // Charts written before the column existed, or imported from an older export.
+    expect(ratePrefill(CHART, 'MR Granites', 'WO Pass', 25)?.commRate).toBe(25);
   });
 
   it('keeps a rent rate of 0 for crushers that supply their own vehicles', () => {

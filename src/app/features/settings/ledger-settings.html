@@ -1,5 +1,21 @@
 <div class="app-page">
-  <app-page-header title="Settings" subtitle="Reference data, backups and imports." icon="tune" />
+  <app-page-header title="Settings" subtitle="Reference data, backups and imports." icon="tune">
+    <!--
+      Edits here are written to disk immediately, so this is a real confirmation
+      rather than an optimistic one.
+    -->
+    @if (justSaved()) {
+      <span
+        actions
+        class="inline-flex items-center gap-1 text-sm text-[var(--mat-sys-primary)]"
+        role="status"
+        data-testid="settings-saved"
+      >
+        <mat-icon class="!h-5 !w-5 !text-xl">check_circle</mat-icon>
+        Saved
+      </span>
+    }
+  </app-page-header>
 
   <div class="flex flex-col gap-4">
     <!-- ---------- Discount rate ---------- -->
@@ -29,7 +45,10 @@
     <app-section-card
       title="Rate chart"
       icon="price_change"
-      [subtitle]="counts().rates + ' entries · pre-fill only, never applied to saved rows'"
+      [subtitle]="
+        counts().rates +
+        ' entries · autopopulates Quary, Crusher, Rent and Comm on new rows · never applied to saved rows'
+      "
     >
       <button
         actions
@@ -54,6 +73,7 @@
                 <th scope="col" class="app-num">Quary ₹/t</th>
                 <th scope="col" class="app-num">Rent ₹/t</th>
                 <th scope="col" class="app-num">Crusher ₹/t</th>
+                <th scope="col" class="app-num">Comm ₹/t</th>
                 <th scope="col"><span class="sr-only">Remove</span></th>
               </tr>
             </thead>
@@ -116,6 +136,23 @@
                       (ngModelChange)="updateRate(i, { crusherRate: +$event })"
                       [name]="'rate-crusher-rate-' + i"
                       [attr.aria-label]="'Crusher rate, row ' + (i + 1)"
+                    />
+                  </td>
+                  <td>
+                    <!--
+                      Autopopulates the row's Comm cell. Several crushers run at ₹0;
+                      leaving this blank falls back to the global discount rate.
+                    -->
+                    <input
+                      class="app-field app-field--num !min-h-10 min-w-[90px]"
+                      type="number"
+                      step="1"
+                      min="0"
+                      [ngModel]="entry.comm ?? discountRate()"
+                      (ngModelChange)="updateRate(i, { comm: +$event })"
+                      [name]="'rate-comm-' + i"
+                      [attr.aria-label]="'Commission rate, row ' + (i + 1)"
+                      [attr.data-testid]="'rate-comm-' + i"
                     />
                   </td>
                   <td>

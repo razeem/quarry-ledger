@@ -1,0 +1,228 @@
+// Spreadsheet-style entry grid.
+//
+// SCSS rather than utilities because this is what Tailwind cannot express cleanly:
+// sticky header/footer rows inside a scroll container, cell-state tints driven by
+// design tokens, and the absolutely-positioned cell badges.
+//
+// The grid scrolls sideways inside `.sheet-scroll` — the page itself must never
+// scroll horizontally, including at 375px.
+
+.sheet-wrap {
+  padding: 0;
+  overflow: hidden; // clip the scroll container to the card's rounded corners
+}
+
+.sheet-scroll {
+  overflow: auto;
+  // Tall enough to show a useful stack of saved rows, short enough that the
+  // totals strip and Add button stay visible on a laptop without scrolling.
+  max-height: min(62vh, 560px);
+  overscroll-behavior-x: contain;
+}
+
+.sheet {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.875rem;
+
+  th,
+  td {
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+    text-align: left;
+    vertical-align: middle;
+  }
+  th:last-child,
+  td:last-child {
+    border-right: 0;
+  }
+}
+
+// ---- Header: pinned to the top of the scroll box ----
+.sheet thead th {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-elev);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  white-space: nowrap;
+}
+
+// Tint the header groups so it is obvious which columns fill themselves.
+.sheet__th--auto {
+  color: var(--accent-1);
+}
+.sheet__th--calc {
+  background: color-mix(in srgb, var(--accent-2) 10%, var(--bg-elev)) !important;
+}
+
+// ---- The entry row: pinned to the bottom, like the new row in a sheet ----
+.sheet__entry > td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  background: var(--bg-elev);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--accent-1) 45%, transparent);
+}
+
+// A cell is the input itself: no border of its own, the grid lines do that job.
+.sheet__cell {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.9rem;
+
+  &::placeholder {
+    color: color-mix(in srgb, var(--text-soft) 65%, transparent);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--accent-1);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent-1) 8%, transparent);
+  }
+}
+
+.sheet__cell--num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+// Autopopulated, untouched: tinted so it reads as "filled for you, but yours to change".
+.sheet__cell--auto {
+  background: color-mix(in srgb, var(--accent-1) 9%, transparent);
+}
+
+// Typed over by the user: a distinct tint so an override is never mistaken for
+// a chart value.
+.sheet__cell--edited {
+  background: color-mix(in srgb, var(--accent-2) 16%, transparent);
+  font-weight: 600;
+}
+
+// ---- Cell badge ('auto' / 'edited' / 'saved') ----
+.sheet__autocell {
+  position: relative;
+}
+
+.sheet__badge {
+  position: absolute;
+  left: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+// ---- Computed columns: read-only ----
+.sheet__calc {
+  padding: 0.5rem 0.6rem;
+  text-align: right;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--accent-2) 7%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
+.sheet__calc--loss {
+  color: var(--mat-sys-error);
+}
+
+// ---- Saved rows, stacked above the entry row ----
+.sheet__saved > td {
+  padding: 0.45rem 0.6rem;
+  white-space: nowrap;
+  color: var(--text-soft);
+}
+.sheet__saved:hover > td {
+  background: var(--chip-bg);
+  color: var(--text);
+}
+
+// A saved rate that no longer matches the chart: same tint as an edited entry
+// cell, so "overridden" reads identically whether it is being typed or reviewed.
+// The left marker keeps it distinguishable without relying on colour alone.
+.sheet__saved--differs {
+  position: relative;
+  background: color-mix(in srgb, var(--accent-2) 20%, transparent);
+  color: var(--text) !important;
+  font-weight: 700;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-2);
+  }
+}
+
+// ---- Legend swatches ----
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+
+  &--auto {
+    background: color-mix(in srgb, var(--accent-1) 22%, transparent);
+  }
+  &--edited {
+    background: color-mix(in srgb, var(--accent-2) 40%, transparent);
+  }
+}
+
+// ---- Totals strip: the computed columns repeated where they are always visible ----
+.sheet-total {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  padding: 0.85rem 1rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--accent-1) 5%, transparent);
+
+  &__item {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+  }
+
+  &__label {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-soft);
+  }
+
+  &__strong {
+    font-size: 1.05rem;
+    font-weight: 700;
+  }
+  &__strong--loss {
+    color: var(--mat-sys-error);
+  }
+}

@@ -62,7 +62,7 @@ export class TransferError extends Error {
  */
 export const KNOWN_COLLECTIONS: Record<string, { label: string; version: number }> = {
   'ledger-rows': { label: 'Ledger rows', version: 1 },
-  'rate-chart': { label: 'Rate chart', version: 1 },
+  'rate-chart': { label: 'Rate chart', version: 2 },
   vehicles: { label: 'Vehicles', version: 1 },
   'ledger-settings': { label: 'Ledger settings', version: 1 },
   'ledger-seed': { label: 'Seed state', version: 1 },

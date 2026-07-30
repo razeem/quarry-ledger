@@ -1,12 +1,12 @@
-<div class="app-page">
+<div class="app-page app-page--wide">
   <app-page-header
-    [title]="isEditing() ? 'Edit load' : 'New load'"
+    [title]="isEditing() ? 'Edit row' : 'New load'"
     [subtitle]="
       isEditing()
         ? 'Rates stay as they were snapshotted on this row.'
-        : 'Rates pre-fill from the chart and remain editable.'
+        : 'Fill the plain cells — the tinted ones fill themselves and can still be edited.'
     "
-    icon="add_circle"
+    icon="table_rows"
   >
     @if (isEditing()) {
       <button
@@ -22,221 +22,309 @@
     }
   </app-page-header>
 
-  <form class="flex flex-col gap-4" (ngSubmit)="save()">
-    <app-section-card title="Load" icon="local_shipping">
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
-        <div>
-          <label class="app-label" for="entry-date">Date</label>
-          <input
-            id="entry-date"
-            class="app-field"
-            type="date"
-            [ngModel]="date()"
-            (ngModelChange)="date.set($event)"
-            name="date"
-            data-testid="entry-date"
-          />
-        </div>
+  <form (ngSubmit)="save()">
+    <!--
+      The Daily Ledger as a sheet: columns in the source workbook's own order, the
+      grid scrolling sideways inside its own box (the page never does, even at
+      375px). The header pins to the top and the entry row pins to the bottom, so
+      each added row lands on the stack directly above it.
+    -->
+    <div class="sheet-wrap app-section">
+      <div class="sheet-scroll" #scroller>
+        <table class="sheet">
+          <caption class="sr-only">
+            Rows already saved for this date, followed by the new-load entry row
+          </caption>
+          <thead>
+            <tr>
+              @for (col of COLUMNS; track col.key) {
+                <th
+                  scope="col"
+                  [class.sheet__th--auto]="col.group === 'auto'"
+                  [class.sheet__th--calc]="col.group === 'calc'"
+                  [style.min-width.px]="col.width"
+                >
+                  {{ col.label }}
+                </th>
+              }
+            </tr>
+          </thead>
 
-        <div>
-          <label class="app-label" for="entry-qty">Quantity (tons)</label>
-          <input
-            id="entry-qty"
-            class="app-field app-field--num"
-            type="number"
-            inputmode="decimal"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            [ngModel]="qty()"
-            (ngModelChange)="qty.set($event)"
-            name="qty"
-            data-testid="entry-qty"
-          />
-        </div>
-
-        <div class="col-span-full">
-          <label class="app-label" for="entry-crusher">Crusher</label>
-          <input
-            id="entry-crusher"
-            class="app-field"
-            type="text"
-            list="crusher-options"
-            autocomplete="off"
-            placeholder="Type or pick a crusher"
-            [ngModel]="crusher()"
-            (ngModelChange)="onCrusherChange($event)"
-            name="crusher"
-            data-testid="entry-crusher"
-          />
-          <!-- Free text: a brand-new crusher can be typed straight in. -->
-          <datalist id="crusher-options">
-            @for (name of crushers(); track name) {
-              <option [value]="name"></option>
+          <tbody>
+            <!-- ---------- rows already saved for this date, oldest first ---------- -->
+            @for (view of dayRowViews(); track view.row.id) {
+              <tr class="sheet__saved">
+                <td>{{ view.row.date }}</td>
+                <td>{{ view.row.crusher }}</td>
+                <td>{{ view.row.passType ?? '\u2014' }}</td>
+                <td class="app-num text-right">{{ view.row.qty.toFixed(2) }}</td>
+                <!--
+                  A rate that no longer matches the chart is highlighted, so an
+                  overridden row stands out from the autopopulated ones.
+                -->
+                <td
+                  class="app-num text-right"
+                  [class.sheet__saved--differs]="view.differs.quaryRate"
+                  [attr.title]="view.differs.quaryRate ? DIFFERS_HINT : null"
+                >
+                  {{ view.row.quaryRate }}
+                </td>
+                <td
+                  class="app-num text-right"
+                  [class.sheet__saved--differs]="view.differs.crusherRate"
+                  [attr.title]="view.differs.crusherRate ? DIFFERS_HINT : null"
+                >
+                  {{ view.row.crusherRate }}
+                </td>
+                <td
+                  class="app-num text-right"
+                  [class.sheet__saved--differs]="view.differs.rentRate"
+                  [attr.title]="view.differs.rentRate ? DIFFERS_HINT : null"
+                >
+                  {{ view.row.rentRate }}
+                </td>
+                <td
+                  class="app-num text-right"
+                  [class.sheet__saved--differs]="view.differs.commRate"
+                  [attr.title]="view.differs.commRate ? DIFFERS_HINT : null"
+                >
+                  {{ view.row.commRate }}
+                </td>
+                <td>{{ view.row.vehicle || '\u2014' }}</td>
+                <td class="app-num text-right">{{ inr(view.calc.crusherAmount) }}</td>
+                <td class="app-num text-right">{{ inr(view.calc.quaryAmount) }}</td>
+                <td class="app-num text-right">{{ view.calc.vehicleTon.toFixed(2) }}</td>
+                <td class="app-num text-right">{{ inr(view.calc.vehicleRent) }}</td>
+                <td class="app-num text-right" [class.sheet__calc--loss]="view.calc.profit < 0">
+                  {{ inr(view.calc.profit) }}
+                </td>
+                <td class="app-num text-right">{{ inr(view.calc.discount) }}</td>
+              </tr>
             }
-          </datalist>
-        </div>
 
-        <div class="col-span-full">
-          <span class="app-label" id="entry-pass-label">Pass type</span>
-          <mat-button-toggle-group
-            class="w-full"
-            [value]="passType()"
-            (change)="onPassTypeChange($event.value)"
-            aria-labelledby="entry-pass-label"
-            data-testid="entry-pass-type"
-          >
-            <mat-button-toggle class="flex-1" value="Pass" data-testid="entry-pass"
-              >Pass</mat-button-toggle
-            >
-            <mat-button-toggle class="flex-1" value="WO Pass" data-testid="entry-wo-pass">
-              WO Pass
-            </mat-button-toggle>
-          </mat-button-toggle-group>
-        </div>
+            <!-- ---------- the entry row ---------- -->
+            <tr class="sheet__entry">
+              <td>
+                <input
+                  class="sheet__cell"
+                  type="date"
+                  aria-label="Date"
+                  [ngModel]="date()"
+                  (ngModelChange)="date.set($event)"
+                  (focus)="revealCell($event)"
+                  name="date"
+                  data-testid="entry-date"
+                />
+              </td>
 
-        <div class="col-span-full">
-          <label class="app-label" for="entry-vehicle">Vehicle</label>
-          <input
-            id="entry-vehicle"
-            class="app-field"
-            type="text"
-            list="vehicle-options"
-            autocomplete="off"
-            placeholder="Registration (optional)"
-            [ngModel]="vehicle()"
-            (ngModelChange)="vehicle.set($event)"
-            name="vehicle"
-            data-testid="entry-vehicle"
-          />
-          <!-- Registrations are messy free text and are never normalised. -->
-          <datalist id="vehicle-options">
-            @for (num of vehicles(); track num) {
-              <option [value]="num"></option>
-            }
-          </datalist>
-        </div>
+              <td>
+                <input
+                  class="sheet__cell"
+                  type="text"
+                  list="crusher-options"
+                  autocomplete="off"
+                  placeholder="Crusher"
+                  aria-label="Crusher"
+                  [ngModel]="crusher()"
+                  (ngModelChange)="onCrusherChange($event)"
+                  (focus)="revealCell($event)"
+                  name="crusher"
+                  data-testid="entry-crusher"
+                />
+                <!-- Free text: a brand-new crusher can be typed straight in. -->
+                <datalist id="crusher-options">
+                  @for (name of crushers(); track name) {
+                    <option [value]="name"></option>
+                  }
+                </datalist>
+              </td>
+
+              <td>
+                <select
+                  class="sheet__cell"
+                  aria-label="Pass type"
+                  [ngModel]="passType()"
+                  (ngModelChange)="onPassTypeChange($event)"
+                  (focus)="revealCell($event)"
+                  name="passType"
+                  data-testid="entry-pass-type"
+                >
+                  <option value="Pass">Pass</option>
+                  <option value="WO Pass">WO Pass</option>
+                </select>
+              </td>
+
+              <td>
+                <input
+                  #qtyCell
+                  class="sheet__cell sheet__cell--num"
+                  type="number"
+                  inputmode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  aria-label="Quantity in tons"
+                  [ngModel]="qty()"
+                  (ngModelChange)="qty.set($event)"
+                  (focus)="revealCell($event)"
+                  name="qty"
+                  data-testid="entry-qty"
+                />
+              </td>
+
+              <!-- The four autopopulated rate cells: tinted, badged, still editable. -->
+              @for (rate of RATE_COLUMNS; track rate.field) {
+                <td class="sheet__autocell">
+                  <input
+                    class="sheet__cell sheet__cell--num"
+                    [class.sheet__cell--auto]="isAuto(rate.field)"
+                    [class.sheet__cell--edited]="rateOrigin(rate.field) === 'edited'"
+                    type="number"
+                    inputmode="decimal"
+                    step="1"
+                    [attr.aria-label]="rate.label"
+                    [ngModel]="rateValue(rate.field)"
+                    (ngModelChange)="onRateEdit(rate.field, $event)"
+                    (focus)="revealCell($event)"
+                    [name]="rate.field"
+                    [attr.data-testid]="rate.testid"
+                  />
+                  @if (rateOrigin(rate.field) !== 'none') {
+                    <span class="sheet__badge" aria-hidden="true">{{
+                      rateOrigin(rate.field)
+                    }}</span>
+                  }
+                </td>
+              }
+
+              <td>
+                <input
+                  class="sheet__cell"
+                  type="text"
+                  list="vehicle-options"
+                  autocomplete="off"
+                  placeholder="Vehicle"
+                  aria-label="Vehicle registration"
+                  [ngModel]="vehicle()"
+                  (ngModelChange)="vehicle.set($event)"
+                  (focus)="revealCell($event)"
+                  name="vehicle"
+                  data-testid="entry-vehicle"
+                />
+                <!-- Registrations are messy free text and are never normalised. -->
+                <datalist id="vehicle-options">
+                  @for (num of vehicles(); track num) {
+                    <option [value]="num"></option>
+                  }
+                </datalist>
+              </td>
+
+              <!-- Computed columns: read-only, straight from the domain engine. -->
+              <td class="sheet__calc app-num" data-testid="sheet-crusher-amount">
+                {{ inr(preview().crusherAmount) }}
+              </td>
+              <td class="sheet__calc app-num">{{ inr(preview().quaryAmount) }}</td>
+              <td class="sheet__calc app-num">{{ preview().vehicleTon.toFixed(2) }}</td>
+              <td class="sheet__calc app-num">{{ inr(preview().vehicleRent) }}</td>
+              <td
+                class="sheet__calc app-num"
+                [class.sheet__calc--loss]="preview().profit < 0"
+                data-testid="sheet-profit"
+              >
+                {{ inr(preview().profit) }}
+              </td>
+              <td class="sheet__calc app-num">{{ inr(preview().discount) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-    </app-section-card>
 
-    <app-section-card
-      title="Rates"
-      icon="price_change"
-      eyebrow="Snapshot"
-      subtitle="Saved onto this row as entered. Changing the chart later will not alter it."
-    >
-      <div class="grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-4">
-        <div>
-          <label class="app-label" for="entry-quary-rate">Quary ₹/t</label>
-          <input
-            id="entry-quary-rate"
-            class="app-field app-field--num"
-            type="number"
-            inputmode="decimal"
-            step="1"
-            [ngModel]="quaryRate()"
-            (ngModelChange)="quaryRate.set($event)"
-            name="quaryRate"
-            data-testid="entry-quary-rate"
-          />
-        </div>
-        <div>
-          <label class="app-label" for="entry-crusher-rate">Crusher ₹/t</label>
-          <input
-            id="entry-crusher-rate"
-            class="app-field app-field--num"
-            type="number"
-            inputmode="decimal"
-            step="1"
-            [ngModel]="crusherRate()"
-            (ngModelChange)="crusherRate.set($event)"
-            name="crusherRate"
-            data-testid="entry-crusher-rate"
-          />
-        </div>
-        <div>
-          <label class="app-label" for="entry-rent-rate">Rent ₹/t</label>
-          <input
-            id="entry-rent-rate"
-            class="app-field app-field--num"
-            type="number"
-            inputmode="decimal"
-            step="1"
-            [ngModel]="rentRate()"
-            (ngModelChange)="rentRate.set($event)"
-            name="rentRate"
-            data-testid="entry-rent-rate"
-          />
-        </div>
-        <div>
-          <label class="app-label" for="entry-comm-rate">Comm ₹/t</label>
-          <input
-            id="entry-comm-rate"
-            class="app-field app-field--num"
-            type="number"
-            inputmode="decimal"
-            step="1"
-            [ngModel]="commRate()"
-            (ngModelChange)="commRate.set($event)"
-            name="commRate"
-            data-testid="entry-comm-rate"
-          />
-        </div>
-      </div>
-    </app-section-card>
-
-    <app-section-card title="This load works out to" icon="calculate" eyebrow="Live">
-      <dl class="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-x-4 gap-y-3 m-0">
-        <div>
-          <dt class="app-label">Crusher amount</dt>
-          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-crusher-amount">
+      <!--
+        Totals strip: the computed columns sit at the far right of the grid, so the
+        ones that matter are repeated here where they are always on screen.
+      -->
+      <div class="sheet-total">
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Crusher amt</span>
+          <span class="app-num" data-testid="preview-crusher-amount">
             {{ inr(preview().crusherAmount) }}
-          </dd>
+          </span>
         </div>
-        <div>
-          <dt class="app-label">Quary amount</dt>
-          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-quary-amount">
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Quary amt</span>
+          <span class="app-num" data-testid="preview-quary-amount">
             {{ inr(preview().quaryAmount) }}
-          </dd>
+          </span>
         </div>
-        <div>
-          <dt class="app-label">Vehicle rent</dt>
-          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-vehicle-rent">
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Rent</span>
+          <span class="app-num" data-testid="preview-vehicle-rent">
             {{ inr(preview().vehicleRent) }}
-          </dd>
+          </span>
         </div>
-        <div>
-          <dt class="app-label">Profit</dt>
-          <dd
-            class="app-num m-0 text-lg font-bold"
-            [style.color]="preview().profit < 0 ? 'var(--mat-sys-error)' : 'var(--mat-sys-primary)'"
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Profit</span>
+          <span
+            class="app-num sheet-total__strong"
+            [class.sheet-total__strong--loss]="preview().profit < 0"
             data-testid="preview-profit"
           >
             {{ inr(preview().profit) }}
-          </dd>
+          </span>
         </div>
-        <div>
-          <dt class="app-label">Discount</dt>
-          <dd class="app-num m-0 text-lg font-bold" data-testid="preview-discount">
-            {{ inr(preview().discount) }}
-          </dd>
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Discount</span>
+          <span class="app-num" data-testid="preview-discount">{{ inr(preview().discount) }}</span>
         </div>
-      </dl>
-    </app-section-card>
+      </div>
+    </div>
 
-    <button
-      mat-flat-button
-      class="!min-h-14 !text-base"
-      type="submit"
-      [disabled]="!canSave() || !ready() || saving()"
-      data-testid="entry-save"
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+      <button
+        mat-flat-button
+        class="!min-h-14 !text-base grow sm:grow-0"
+        type="submit"
+        [disabled]="!canSave() || !ready() || saving()"
+        data-testid="entry-save"
+      >
+        <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
+        {{ isEditing() ? 'Update row' : 'Add row' }}
+      </button>
+
+      @if (!canSave()) {
+        <p class="m-0 text-sm text-[var(--text-soft)]">Fill in a crusher and a quantity above 0.</p>
+      } @else if (!isEditing()) {
+        <p class="m-0 text-sm text-[var(--text-soft)]">
+          Press Enter to add, then just type the next quantity.
+        </p>
+      }
+    </div>
+
+    <p
+      class="mt-3 mb-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--text-soft)]"
     >
-      <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
-      {{ isEditing() ? 'Update load' : 'Save load' }}
-    </button>
-    @if (!canSave()) {
-      <p class="text-center text-sm text-[var(--text-soft)] m-0">
-        Enter a crusher and a quantity above 0 to save.
+      <span class="inline-flex items-center gap-1.5">
+        <span class="legend-swatch legend-swatch--auto"></span>
+        From the rate chart
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="legend-swatch legend-swatch--edited"></span>
+        Differs from the chart
+        @if (rowsDifferingFromChart() > 0) {
+          ({{ rowsDifferingFromChart() }}
+          {{ rowsDifferingFromChart() === 1 ? 'row' : 'rows' }} below)
+        }
+      </span>
+    </p>
+
+    @if (dayTotals().loads) {
+      <p class="mt-3 mb-0 text-sm text-[var(--text-soft)]" data-testid="entry-day-summary">
+        <strong>{{ dayTotals().loads }}</strong> rows on {{ dayLabel() }} ·
+        <span class="app-num">{{ tons(dayTotals().qty) }}</span> · profit
+        <span class="app-num">{{ inr(dayTotals().profit) }}</span>
+        @if (hiddenDayRows() > 0) {
+          · showing the latest {{ dayRows().length }}
+        }
       </p>
     }
   </form>

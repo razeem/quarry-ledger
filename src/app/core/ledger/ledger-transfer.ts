@@ -134,6 +134,7 @@ export class LedgerTransfer {
       { header: 'Quary Rate', key: 'quary', width: 12 },
       { header: 'Rent Rate', key: 'rent', width: 11 },
       { header: 'Crusher Rate', key: 'crusherRate', width: 13 },
+      { header: 'Comm Rate', key: 'comm', width: 11 },
     ];
     for (const entry of snapshot.rateChart) rates.addRow(entry);
 
@@ -250,12 +251,16 @@ export class LedgerTransfer {
         const crusher = str(cell('crusher'));
         const type = passType(cell('pass type'));
         if (!crusher || !type) return;
+        const comm = cell('comm rate');
         rateChart.push({
           crusher,
           type,
           quary: num(cell('quary rate')),
           rent: num(cell('rent rate')),
           crusherRate: num(cell('crusher rate')),
+          // Absent in exports predating the column — leave it undefined so the
+          // global discount rate keeps applying rather than forcing a 0.
+          ...(str(comm) === '' ? {} : { comm: num(comm) }),
         });
       });
     }
@@ -321,6 +326,8 @@ function normaliseRate(raw: Record<string, unknown>): RateChartEntry {
     quary: num(raw['quary']),
     rent: num(raw['rent']),
     crusherRate: num(raw['crusherRate']),
+    // Optional: a backup predating the column must not be forced to 0.
+    ...(raw['comm'] == null ? {} : { comm: num(raw['comm']) }),
   };
 }
 

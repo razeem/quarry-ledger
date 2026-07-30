@@ -42,20 +42,41 @@ export class Ledger {
   protected readonly from = signal('');
   protected readonly to = signal('');
 
+  /**
+   * Set as soon as the user touches the filter. Seeding is asynchronous, so
+   * without this a filter changed during the first load would be silently
+   * overwritten the moment the default range was applied.
+   */
+  private rangeTouched = false;
+
   constructor() {
     // Default to the 5 most recent dates that actually have rows. A calendar
     // window would usually be empty — the quarry runs in bursts.
     // Waits for `initialised`, not `ready`: on a fresh device `ready` flips true
     // before the seed lands, which would latch this onto an empty row set.
     const seedRange = effect(() => {
+      if (this.rangeTouched) {
+        seedRange.destroy();
+        return;
+      }
       if (!this.store.initialised()) return;
       const range = lastActiveDateRange(this.store.rows(), 5);
       seedRange.destroy();
-      if (range) {
-        this.from.set(range[0]);
-        this.to.set(range[1]);
-      }
+      if (this.rangeTouched || !range) return;
+      this.from.set(range[0]);
+      this.to.set(range[1]);
     });
+  }
+
+  /** Any user edit of the range, from either date field. */
+  protected setFrom(value: string): void {
+    this.rangeTouched = true;
+    this.from.set(value);
+  }
+
+  protected setTo(value: string): void {
+    this.rangeTouched = true;
+    this.to.set(value);
   }
 
   protected readonly visibleRows = computed(() => {
@@ -83,6 +104,7 @@ export class Ledger {
 
   /** Reset the filter to show every row on record. */
   protected showAll(): void {
+    this.rangeTouched = true;
     this.from.set('');
     this.to.set('');
   }
