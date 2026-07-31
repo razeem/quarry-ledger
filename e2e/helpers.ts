@@ -26,7 +26,7 @@ export const SEED_ROWS = 143;
  * The seed arrives as content-hashed chunks, so there is no stable filename to
  * match on — `delaySeedChunks` finds them by looking for these instead.
  */
-const SEED_MARKERS = ['MR Granites', 'KL 61'];
+const SEED_MARKERS = ['Hillview Granites', 'Northgate Crusher'];
 
 /**
  * Hold back the lazily-imported seed chunks by `ms`, so the window where the app

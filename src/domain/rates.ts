@@ -63,7 +63,7 @@ export function crusherNames(chart: readonly RateChartEntry[]): string[] {
 /**
  * Owner of a vehicle registration, or `''` when unknown.
  *
- * Registrations are messy free text ('KI 40 Q 3885', 'KL24 H 6714'); the lookup is
+ * Registrations are messy free text ('KI 00 Q 1011', 'KL00 H 1057'); the lookup is
  * an exact string match and a missing owner is expected, not an error.
  */
 export function vehicleOwner(vehicles: readonly Vehicle[], registration: string): string {

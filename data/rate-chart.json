@@ -1,6 +1,6 @@
 [
  {
-  "crusher": "MR Granites",
+  "crusher": "Hillview Granites",
   "type": "Pass",
   "quary": 650,
   "rent": 0,
@@ -8,7 +8,7 @@
   "comm": 0
  },
  {
-  "crusher": "MR Granites",
+  "crusher": "Hillview Granites",
   "type": "WO Pass",
   "quary": 610,
   "rent": 0,
@@ -16,7 +16,7 @@
   "comm": 20
  },
  {
-  "crusher": "Kochammini",
+  "crusher": "Northgate Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": 0,
@@ -24,7 +24,7 @@
   "comm": 20
  },
  {
-  "crusher": "Kochammini",
+  "crusher": "Northgate Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 0,
@@ -32,7 +32,7 @@
   "comm": 20
  },
  {
-  "crusher": "Mavila crusher",
+  "crusher": "Midtown Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": null,
@@ -40,7 +40,7 @@
   "comm": 20
  },
  {
-  "crusher": "Mavila crusher",
+  "crusher": "Midtown Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 0,
@@ -48,7 +48,7 @@
   "comm": 20
  },
  {
-  "crusher": "Desinganad crusher",
+  "crusher": "Lakeside Crusher",
   "type": "Pass",
   "quary": 650,
   "rent": 210,
@@ -56,7 +56,7 @@
   "comm": 0
  },
  {
-  "crusher": "Desinganad crusher",
+  "crusher": "Lakeside Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 210,
@@ -64,7 +64,7 @@
   "comm": 20
  },
  {
-  "crusher": "Desinganad MR own crusher",
+  "crusher": "Lakeside Own Crusher",
   "type": "Pass",
   "quary": 650,
   "rent": null,
@@ -72,7 +72,7 @@
   "comm": 0
  },
  {
-  "crusher": "Desinganad MR own crusher",
+  "crusher": "Lakeside Own Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": null,
@@ -88,7 +88,7 @@
   "comm": 20
  },
  {
-  "crusher": "AVK",
+  "crusher": "Riverside Crusher",
   "type": "Pass",
   "quary": 650,
   "rent": 250,
@@ -96,7 +96,7 @@
   "comm": 0
  },
  {
-  "crusher": "AVK",
+  "crusher": "Riverside Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 250,
@@ -104,7 +104,7 @@
   "comm": 20
  },
  {
-  "crusher": "AM Crusher",
+  "crusher": "Crossroads Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": 220,
@@ -112,7 +112,7 @@
   "comm": 20
  },
  {
-  "crusher": "Al Falah metal crusher",
+  "crusher": "Eastfield Metal Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": 215,
@@ -120,7 +120,7 @@
   "comm": 20
  },
  {
-  "crusher": "Al Falah metal crusher",
+  "crusher": "Eastfield Metal Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 215,
@@ -128,7 +128,7 @@
   "comm": 20
  },
  {
-  "crusher": "Thangalathu Crusher",
+  "crusher": "Greenfield Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": 210,
@@ -136,7 +136,7 @@
   "comm": 20
  },
  {
-  "crusher": "Thangalathu Crusher",
+  "crusher": "Greenfield Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 210,
@@ -144,7 +144,7 @@
   "comm": 20
  },
  {
-  "crusher": "Arun Kaavuvila",
+  "crusher": "Southpoint Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": 0,
@@ -152,7 +152,7 @@
   "comm": 20
  },
  {
-  "crusher": "Arun Kaavuvila",
+  "crusher": "Southpoint Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 0,
@@ -160,7 +160,7 @@
   "comm": 20
  },
  {
-  "crusher": "Police Mahesh",
+  "crusher": "Westbank Crusher",
   "type": "Pass",
   "quary": 640,
   "rent": 0,
@@ -168,7 +168,7 @@
   "comm": 20
  },
  {
-  "crusher": "Police Mahesh",
+  "crusher": "Westbank Crusher",
   "type": "WO Pass",
   "quary": 610,
   "rent": 0,
@@ -176,7 +176,7 @@
   "comm": 20
  },
  {
-  "crusher": "MR Oyoor",
+  "crusher": "Hillview Depot",
   "type": "Pass",
   "quary": 640,
   "rent": 220,
@@ -184,7 +184,7 @@
   "comm": 0
  },
  {
-  "crusher": "MR Oyoor",
+  "crusher": "Hillview Depot",
   "type": "WO Pass",
   "quary": 610,
   "rent": 220,

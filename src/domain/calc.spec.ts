@@ -7,14 +7,14 @@ function row(overrides: Partial<LedgerRow> = {}): LedgerRow {
     id: 'test',
     date: '2026-07-29',
     item: 'Rock',
-    crusher: 'AVK',
+    crusher: 'Riverside Crusher',
     passType: 'WO Pass',
     qty: 30,
     quaryRate: 610,
     crusherRate: 900,
     rentRate: 220,
     commRate: 20,
-    vehicle: 'KL 61 D 5401',
+    vehicle: 'KL 00 D 1089',
     ...overrides,
   };
 }

@@ -18,14 +18,14 @@ function row(overrides: Partial<LedgerRow> = {}): LedgerRow {
     id: Math.random().toString(36).slice(2),
     date: '2026-07-29',
     item: 'Rock',
-    crusher: 'AVK',
+    crusher: 'Riverside Crusher',
     passType: 'WO Pass',
     qty: 10,
     quaryRate: 610,
     crusherRate: 900,
     rentRate: 220,
     commRate: 20,
-    vehicle: 'KL 61 D 5401',
+    vehicle: 'KL 00 D 1089',
     ...overrides,
   };
 }
@@ -100,17 +100,17 @@ describe('groupBy', () => {
 
   it('groups by crusher, month and vehicle', () => {
     const rows = [
-      row({ crusher: 'AVK', date: '2026-07-29', vehicle: 'KL 61 D 5401' }),
-      row({ crusher: 'AVK', date: '2026-03-10', vehicle: '' }),
+      row({ crusher: 'Riverside Crusher', date: '2026-07-29', vehicle: 'KL 00 D 1089' }),
+      row({ crusher: 'Riverside Crusher', date: '2026-03-10', vehicle: '' }),
     ];
-    expect([...byCrusher(rows).keys()]).toEqual(['AVK']);
+    expect([...byCrusher(rows).keys()]).toEqual(['Riverside Crusher']);
     expect([...byMonth(rows).keys()]).toEqual(['2026-07', '2026-03']);
-    expect([...byVehicle(rows).keys()]).toEqual(['KL 61 D 5401', '']);
+    expect([...byVehicle(rows).keys()]).toEqual(['KL 00 D 1089', '']);
   });
 
   it('does not normalise crusher names or vehicle numbers', () => {
     // Messy free-text business keys must stay distinct exactly as entered.
-    const rows = [row({ vehicle: 'KL24 H 6714' }), row({ vehicle: 'KL 24 H 6714' })];
+    const rows = [row({ vehicle: 'KL00 H 1057' }), row({ vehicle: 'KL 00 H 1057' })];
     expect(byVehicle(rows).size).toBe(2);
   });
 });

@@ -26,6 +26,27 @@ Phase 2 (Supabase sync) is next — see WORK_PLAN.md §5.
   regenerate ids on edit.
 - Don't normalise vehicle numbers or crusher names; they are free-text business keys.
 
+## `data/` is sample data, and only the labels are sample
+
+The seed is what a first-time user sees, so it carries **no real crusher names and no
+real vehicle registrations**. Those labels were relabelled to plainly-fictional
+placeholders ('Northgate Crusher', `KL 00 …` — district 00 is unassigned, so no synthetic
+plate can be a real vehicle). Owner first names were kept: the business owner confirmed
+they are fine.
+
+Everything else is **byte-identical to the verified original**: every quantity, rate,
+date, pass type and row id. Names never enter a calculation, so all of
+`golden-totals.json` still reproduces exactly — which is why this was a relabelling and
+not a regeneration. **Never "refresh" the seed with plausible-looking random numbers**:
+that would break the golden contract, and the contract is the thing that proves the engine
+matches the customer's workbook.
+
+The format quirks below are deliberately preserved through the relabelling, because the
+app must never normalise a free-text business key: mixed spacing (`KL00T5450` vs
+`KL 00 T 5450`), lower-case variants (`Kl 00 Q 1062`), a leading-zero pair
+(`KL 00 L 0213` / `KL 00 L 213` — the same vehicle written two ways), plates with no series
+letter (`KL 00 1042`), and the `KI` state-code typo.
+
 ## Data quirks the engine must preserve
 
 These are real properties of the seed data, encoded in the golden totals. Do not "fix" them.
@@ -126,7 +147,7 @@ Each of these was a real bug caught by the test suite, not a hypothetical.
 - The rate chart autopopulates **all four** rate cells — quary, crusher, rent and comm.
   `comm` is a per-entry column (v2) because several crushers genuinely run at ₹0; when an
   entry has no `comm` (a v1 chart or an older import) it falls back to the global
-  `discountRatePerTon`. It is only a default: `AVK Pass` and `MR Granites Pass` have
+  `discountRatePerTon`. It is only a default: `Riverside Crusher Pass` and `Hillview Granites Pass` have
   historically used both ₹0 and ₹20, so the row's own snapshot always wins.
 - On the entry sheet, a rate cell is badged `auto` (from the chart), `saved` (an existing
   row's snapshot) or `edited` (typed over). Saved rows above the entry row highlight any

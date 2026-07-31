@@ -23,7 +23,7 @@ export interface LedgerRow {
   date: string;
   /** Always 'Rock' today; kept flexible. */
   item: string;
-  /** Free-text business key, e.g. 'AVK', 'Al Falah metal crusher'. Never normalised. */
+  /** Free-text business key, e.g. 'Riverside Crusher', 'Eastfield Metal Crusher'. Never normalised. */
   crusher: string;
   /**
    * `null` for the rare row that belongs to neither split — the seed data has one
@@ -42,7 +42,7 @@ export interface LedgerRow {
   rentRate: number;
   /** ₹/ton monthly commission ("monthly discount"); 0 or 20. */
   commRate: number;
-  /** Registration, e.g. 'KL 58 V 5636'. Messy free text; may be ''. Never normalised. */
+  /** Registration, e.g. 'KL 00 V 1087'. Messy free text; may be ''. Never normalised. */
   vehicle: string;
 }
 
@@ -69,7 +69,7 @@ export interface RateChartEntry {
 
 /** A vehicle registration and its owner. Lookup is an exact string match. */
 export interface Vehicle {
-  /** Registration as written, e.g. 'KI 40 Q 3885'. Never normalised. */
+  /** Registration as written, e.g. 'KI 00 Q 1011'. Never normalised. */
   num: string;
   owner: string;
 }

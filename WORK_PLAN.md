@@ -27,14 +27,14 @@ interface LedgerRow {
   id: string;          // unique, immutable — enables cross-device export/merge
   date: string;        // ISO 'YYYY-MM-DD'
   item: string;        // always 'Rock' today; keep flexible
-  crusher: string;     // e.g. 'AVK', 'Al Falah metal crusher', 'Desinganad crusher'
+  crusher: string;     // e.g. 'Riverside Crusher', 'Eastfield Metal Crusher', 'Lakeside Crusher'
   passType: 'Pass' | 'WO Pass';   // with / without quarry pass
   qty: number;         // tons, 2 decimals
   quaryRate: number;   // ₹/ton paid to quarry (snapshot at entry time)
   crusherRate: number; // ₹/ton charged to crusher (snapshot)
   rentRate: number;    // ₹/ton vehicle rent; 0 for own/crusher vehicles
   commRate: number;    // ₹/ton monthly commission ('monthly discount'); 0 or 20
-  vehicle: string;     // registration, e.g. 'KL 58 V 5636'; may be ''
+  vehicle: string;     // registration, e.g. 'KL 00 V 1087'; may be ''
 }
 ```
 **Rates are snapshotted onto the row at entry.** The rate chart only pre-fills the
@@ -70,9 +70,9 @@ and reproduce every golden number exactly (±0.01). Currency is **displayed** ro
 to whole rupees (`₹1,23,456`, en-IN grouping) but **stored/summed unrounded**.
 
 Domain quirks to preserve (do not "fix"):
-- Pass rows currently use quary ₹650, WO Pass ₹610 — except Al Falah Pass at ₹640.
-- Some crushers (MR Granites, MR Oyoor, Desinganad MR own) use vehicles with no rent.
-- Vehicle numbers are messy strings ('KI 40 Q 3885', 'KL24 H 6714') — never normalise
+- Pass rows currently use quary ₹650, WO Pass ₹610 — except Eastfield Pass at ₹640.
+- Some crushers (Hillview Granites, Hillview Depot, Lakeside Own) use vehicles with no rent.
+- Vehicle numbers are messy strings ('KI 00 Q 1011', 'KL00 H 1057') — never normalise
   or validate them away; they must match the vehicles list loosely (exact string match
   for owner lookup, missing owner is fine).
 

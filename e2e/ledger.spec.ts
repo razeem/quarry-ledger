@@ -46,9 +46,9 @@ test.describe('create, edit, delete', () => {
   test('a new load persists across a reload', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-qty').fill('30.45');
-    await page.getByTestId('entry-vehicle').fill('KL 61 D 5401');
+    await page.getByTestId('entry-vehicle').fill('KL 00 D 1089');
 
     // Rates pre-fill from the chart, so the preview is live before saving.
     await expect(page.getByTestId('preview-crusher-amount')).not.toHaveText('₹0');
@@ -66,7 +66,7 @@ test.describe('create, edit, delete', () => {
     await page.goto('/entry');
     // setCrusher waits for the chart, so the captured rate is the real one and not
     // the 0 the cell shows before the seed lands.
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-qty').fill('10');
     const quaryRate = await page.getByTestId('entry-quary-rate').inputValue();
     expect(quaryRate).not.toBe('0');
@@ -74,7 +74,7 @@ test.describe('create, edit, delete', () => {
 
     // Only the quantity clears — consecutive loads from one crusher are the norm.
     await expect(page.getByTestId('entry-qty')).toHaveValue('');
-    await expect(page.getByTestId('entry-crusher')).toHaveValue('AVK');
+    await expect(page.getByTestId('entry-crusher')).toHaveValue('Riverside Crusher');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue(quaryRate);
   });
 
@@ -237,7 +237,7 @@ test.describe('export, wipe and import', () => {
 
 test.describe('rate snapshots', () => {
   test('editing the rate chart never alters an existing row', async ({ page }) => {
-    // Record what an existing AVK row is worth today.
+    // Record what an existing Riverside Crusher row is worth today.
     await page.goto('/reports');
     await page.getByTestId('reports-tab-crusher').click();
     const before = await page.getByTestId('crusher-total-profit').textContent();
@@ -271,7 +271,7 @@ test.describe('mobile', () => {
   test('a load can be entered from the phone-width form', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/entry');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-qty').fill('12.5');
     await saveEntry(page);
 

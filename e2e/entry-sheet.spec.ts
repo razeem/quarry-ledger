@@ -12,9 +12,9 @@ import { delaySeedChunks, saveEntry, setCrusher } from './helpers';
 test.describe('sheet entry row', () => {
   test('autopopulates the rate cells from the chart and badges them', async ({ page }) => {
     await page.goto('/entry');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
 
-    // WO Pass is the default; AVK WO Pass is ₹610 quary in the seeded chart.
+    // WO Pass is the default; Riverside Crusher WO Pass is ₹610 quary in the seeded chart.
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
     await expect(page.getByTestId('entry-crusher-rate')).not.toHaveValue('0');
 
@@ -25,12 +25,12 @@ test.describe('sheet entry row', () => {
 
   test('takes the comm rate from the rate chart, per crusher and pass type', async ({ page }) => {
     await page.goto('/entry');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
 
-    // AVK WO Pass carries the usual ₹20 commission...
+    // Riverside Crusher WO Pass carries the usual ₹20 commission...
     await expect(page.getByTestId('entry-comm-rate')).toHaveValue('20');
 
-    // ...while AVK Pass runs at ₹0 in the seeded chart. A single global rate could
+    // ...while Riverside Crusher Pass runs at ₹0 in the seeded chart. A single global rate could
     // not express that, which is why comm lives on the chart entry.
     await page.getByTestId('entry-pass-type').selectOption('Pass');
     await expect(page.getByTestId('entry-comm-rate')).toHaveValue('0');
@@ -38,22 +38,22 @@ test.describe('sheet entry row', () => {
 
   test('a comm rate edited in Settings autopopulates the next row', async ({ page }) => {
     await page.goto('/settings');
-    // Row 0 of the seeded chart is MR Granites / Pass.
-    await expect(page.getByTestId('rate-crusher-0')).toHaveValue('MR Granites');
+    // Row 0 of the seeded chart is Hillview Granites / Pass.
+    await expect(page.getByTestId('rate-crusher-0')).toHaveValue('Hillview Granites');
     await page.getByTestId('rate-comm-0').fill('35');
     await expect(page.getByTestId('rate-comm-0')).toHaveValue('35');
     // The edit is durable-on-write; wait for the confirmation before navigating.
     await expect(page.getByTestId('settings-saved')).toBeVisible();
 
     await page.goto('/entry');
-    await setCrusher(page, 'MR Granites');
+    await setCrusher(page, 'Hillview Granites');
     await page.getByTestId('entry-pass-type').selectOption('Pass');
     await expect(page.getByTestId('entry-comm-rate')).toHaveValue('35');
   });
 
   test('re-autopopulates when the pass type changes', async ({ page }) => {
     await page.goto('/entry');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
 
     await page.getByTestId('entry-pass-type').selectOption('Pass');
@@ -63,7 +63,7 @@ test.describe('sheet entry row', () => {
 
   test('an overridden rate cell is marked edited and survives re-render', async ({ page }) => {
     await page.goto('/entry');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
 
     await page.getByTestId('entry-quary-rate').fill('700');
@@ -78,7 +78,7 @@ test.describe('sheet entry row', () => {
   test('the override is snapshotted onto the saved row', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-quary-rate').fill('700');
     await page.getByTestId('entry-qty').fill('10');
     await saveEntry(page);
@@ -90,12 +90,12 @@ test.describe('sheet entry row', () => {
 
   test('changing crusher drops a stale override so new chart rates apply', async ({ page }) => {
     await page.goto('/entry');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-quary-rate').fill('999');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('999');
 
     // A different crusher means different chart rates; the old override must not stick.
-    await page.getByTestId('entry-crusher').fill('Al Falah metal crusher');
+    await page.getByTestId('entry-crusher').fill('Eastfield Metal Crusher');
     await expect(page.getByTestId('entry-quary-rate')).not.toHaveValue('999');
   });
 
@@ -121,7 +121,7 @@ test.describe('sheet entry row', () => {
   test('highlights a saved rate that differs from the current chart', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
 
     // Row 1: rates exactly as the chart fills them — nothing to flag.
     await page.getByTestId('entry-qty').fill('10');
@@ -147,7 +147,7 @@ test.describe('sheet entry row', () => {
   }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-rent-rate').fill('456');
     await page.getByTestId('entry-qty').fill('10');
     await saveEntry(page);
@@ -163,7 +163,7 @@ test.describe('sheet entry row', () => {
     await page.getByTestId('entry-date').fill('2026-07-30');
     // The save button is the form's default button, so Enter cannot submit while
     // it is still disabled waiting on the seed. setCrusher waits that out.
-    await setCrusher(page, 'AVK');
+    await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-qty').fill('9');
     await page.getByTestId('entry-qty').press('Enter');
 
@@ -179,7 +179,7 @@ test.describe('sheet entry row', () => {
     // is precisely how this window stayed invisible on a fast machine.
     await delaySeedChunks(page, 6000);
     await page.goto('/entry', { waitUntil: 'commit' });
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await page.getByTestId('entry-crusher').fill('Riverside Crusher');
     await page.getByTestId('entry-qty').fill('9');
 
     // Saving is refused rather than snapshotting a row with 0 rates, and the
@@ -205,17 +205,25 @@ test.describe('sheet entry row', () => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/entry');
 
+    // The sheet itself is wider than its box — that is where the scrolling happens.
+    // Polled, not sampled once: a bare evaluate() straight after goto can measure
+    // before the grid has laid out and read an un-overflowed box.
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const box = document.querySelector('.sheet-scroll');
+            return box ? box.scrollWidth - box.clientWidth : 0;
+          }),
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(0);
+
+    // Only meaningful once the grid is actually overflowing its box.
     const pageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(pageOverflow, 'the page must not scroll horizontally').toBeLessThanOrEqual(1);
-
-    // The sheet itself is wider than its box — that is where the scrolling happens.
-    const scrollable = await page.evaluate(() => {
-      const box = document.querySelector('.sheet-scroll');
-      return box ? box.scrollWidth > box.clientWidth : false;
-    });
-    expect(scrollable, 'the sheet box should scroll horizontally').toBe(true);
   });
 
   test('focusing a cell scrolls it into view instead of leaving it off screen', async ({

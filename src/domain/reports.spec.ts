@@ -22,14 +22,14 @@ function row(overrides: Partial<LedgerRow> = {}): LedgerRow {
     id: Math.random().toString(36).slice(2),
     date: '2026-07-29',
     item: 'Rock',
-    crusher: 'AVK',
+    crusher: 'Riverside Crusher',
     passType: 'WO Pass',
     qty: 10,
     quaryRate: 610,
     crusherRate: 900,
     rentRate: 220,
     commRate: 20,
-    vehicle: 'KL 61 D 5401',
+    vehicle: 'KL 00 D 1089',
     ...overrides,
   };
 }
@@ -65,7 +65,7 @@ describe('dailyReport', () => {
 });
 
 describe('vehicleRentReport', () => {
-  const vehicles: Vehicle[] = [{ num: 'KL 61 D 5401', owner: 'Renjith' }];
+  const vehicles: Vehicle[] = [{ num: 'KL 00 D 1089', owner: 'Renjith' }];
 
   it('excludes rows with no rent (own / crusher-supplied vehicles)', () => {
     const rows = [
@@ -86,11 +86,11 @@ describe('vehicleRentReport', () => {
   });
 
   it('resolves owners exactly and tolerates unknown registrations', () => {
-    const rows = [row({ vehicle: 'KL 61 D 5401' }), row({ vehicle: 'KL 99 Z 0000' })];
+    const rows = [row({ vehicle: 'KL 00 D 1089' }), row({ vehicle: 'KL 00 Z 9999' })];
     const report = vehicleRentReport(rows, '2026-07-29', vehicles);
     const owners = new Map(report.rows.map((r) => [r.vehicle, r.owner]));
-    expect(owners.get('KL 61 D 5401')).toBe('Renjith');
-    expect(owners.get('KL 99 Z 0000')).toBe('');
+    expect(owners.get('KL 00 D 1089')).toBe('Renjith');
+    expect(owners.get('KL 00 Z 9999')).toBe('');
   });
 
   it('totals match the sum of its rows and the day rent total', () => {

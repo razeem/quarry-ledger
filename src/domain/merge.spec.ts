@@ -7,14 +7,14 @@ function row(id: string, overrides: Partial<LedgerRow> = {}): LedgerRow {
     id,
     date: '2026-07-29',
     item: 'Rock',
-    crusher: 'AVK',
+    crusher: 'Riverside Crusher',
     passType: 'WO Pass',
     qty: 30,
     quaryRate: 610,
     crusherRate: 900,
     rentRate: 220,
     commRate: 20,
-    vehicle: 'KL 61 D 5401',
+    vehicle: 'KL 00 D 1089',
     ...overrides,
   };
 }
@@ -23,7 +23,7 @@ describe('rowsEqual', () => {
   it('ignores id and compares every other field', () => {
     expect(rowsEqual(row('a'), row('b'))).toBe(true);
     expect(rowsEqual(row('a'), row('a', { qty: 31 }))).toBe(false);
-    expect(rowsEqual(row('a'), row('a', { vehicle: 'KL 61 D 5402' }))).toBe(false);
+    expect(rowsEqual(row('a'), row('a', { vehicle: 'KL 00 D 1046' }))).toBe(false);
     expect(rowsEqual(row('a'), row('a', { passType: 'Pass' }))).toBe(false);
     expect(rowsEqual(row('a'), row('a', { passType: null }))).toBe(false);
   });
@@ -116,8 +116,8 @@ describe('mergeRateChart', () => {
 
   it('overwrites by crusher + pass type and appends the rest', () => {
     const merged = mergeRateChart(
-      [entry('AVK', 'Pass', 650), entry('AVK', 'WO Pass', 610)],
-      [entry('AVK', 'Pass', 640), entry('New', 'Pass', 700)],
+      [entry('Riverside Crusher', 'Pass', 650), entry('Riverside Crusher', 'WO Pass', 610)],
+      [entry('Riverside Crusher', 'Pass', 640), entry('New', 'Pass', 700)],
     );
     expect(merged).toHaveLength(3);
     expect(merged[0].quary).toBe(640);
@@ -125,7 +125,10 @@ describe('mergeRateChart', () => {
   });
 
   it('treats Pass and WO Pass for one crusher as distinct entries', () => {
-    const merged = mergeRateChart([entry('AVK', 'Pass', 650)], [entry('AVK', 'WO Pass', 610)]);
+    const merged = mergeRateChart(
+      [entry('Riverside Crusher', 'Pass', 650)],
+      [entry('Riverside Crusher', 'WO Pass', 610)],
+    );
     expect(merged).toHaveLength(2);
   });
 });
@@ -139,7 +142,7 @@ describe('mergeVehicles', () => {
   });
 
   it('keeps messy registrations distinct rather than normalising them', () => {
-    const merged = mergeVehicles([v('KL24 H 6714', 'A')], [v('KL 24 H 6714', 'B')]);
+    const merged = mergeVehicles([v('KL00 H 1057', 'A')], [v('KL 00 H 1057', 'B')]);
     expect(merged).toHaveLength(2);
   });
 
