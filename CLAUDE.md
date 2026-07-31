@@ -103,6 +103,14 @@ Each of these was a real bug caught by the test suite, not a hypothetical.
 - **Don't let the bundler constant-fold a float in a test.** `2.3 * 650` is evaluated at
   build time, hiding the IEEE-754 shortfall the test exists to prove; route it through
   `Number('2.3')`.
+- **In e2e, use `e2e/helpers.ts` — never hand-roll the waits.** The seed arrives as lazy
+  chunks, so on a slow runner (CI, notably) the rate cells read `0` for a window after the
+  form is interactive. Reading or asserting a rate before `setCrusher()` resolves captures
+  that `0`; saving before it snapshots a row with zero rates. Three separate CI failures
+  were all this one assumption. Likewise `saveEntry` / `saveEdit` / `waitForToast` wait on
+  the app's own durability signals rather than on a timeout. This does not reproduce on a
+  fast machine — even at 20× CPU throttle — so treat the helpers as mandatory, not
+  situational.
 
 ## Rates and the chart
 

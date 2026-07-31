@@ -1,62 +1,23 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import {
+  expectLoadCount,
+  GOLDEN_ALL_TIME_DISCOUNT,
+  GOLDEN_ALL_TIME_PROFIT,
+  openFullLedger,
+  saveEdit,
+  saveEntry,
+  SEED_ROWS,
+  setCrusher,
+  visibleLoadCount,
+  waitForToast,
+} from './helpers';
 
 /**
  * Phase 1 acceptance tests (WORK_PLAN.md §5).
  *
  * Each test gets a fresh Playwright context, so IndexedDB starts empty and the
- * first-run seed re-runs per test. Selects by `data-testid` only.
+ * first-run seed re-runs per test. See ./helpers.ts for why the waits matter.
  */
-
-/** The seed ships 143 verified rows. */
-const SEED_ROWS = 143;
-
-/**
- * All-time figures from `data/golden-totals.json`, as the UI renders them
- * (whole rupees, en-IN grouping). profit = 3062202.03 − 2686790 − 250775.75.
- */
-const GOLDEN_ALL_TIME_PROFIT = '1,24,636';
-const GOLDEN_ALL_TIME_DISCOUNT = '74,354';
-
-/** Open the Ledger tab and widen the filter to every row on record. */
-async function openFullLedger(page: Page): Promise<void> {
-  await page.goto('/ledger');
-  await page.getByTestId('ledger-show-all').click();
-}
-
-/** The "Showing N loads" count from the Ledger tab's range summary. */
-async function visibleLoadCount(page: Page): Promise<number> {
-  const text = (await page.getByTestId('ledger-range-summary').textContent()) ?? '';
-  return Number(/Showing\s+(\d+)/.exec(text)?.[1] ?? '-1');
-}
-
-async function expectLoadCount(page: Page, expected: number): Promise<void> {
-  await expect.poll(() => visibleLoadCount(page), { timeout: 15_000 }).toBe(expected);
-}
-
-/**
- * Save the entry form and wait until the write has actually landed.
- *
- * The app clears the quantity field only after the row is on disk, so an empty
- * quantity is the durability signal. Navigating before it would race the write.
- */
-async function saveEntry(page: Page): Promise<void> {
-  await page.getByTestId('entry-save').click();
-  await expect(page.getByTestId('entry-qty')).toHaveValue('');
-}
-
-/**
- * Save an edit and wait for the write to land. Updating returns to the Ledger, so
- * arriving there is the durability signal.
- */
-async function saveEdit(page: Page): Promise<void> {
-  await page.getByTestId('entry-save').click();
-  await expect(page).toHaveURL(/\/ledger$/);
-}
-
-/** Wait for a snackbar message — shown only after the action's write completes. */
-async function waitForToast(page: Page, text: string | RegExp): Promise<void> {
-  await expect(page.getByText(text).first()).toBeVisible({ timeout: 30_000 });
-}
 
 test.describe('seeding', () => {
   test('imports the bundled seed data on first run', async ({ page }) => {
@@ -85,7 +46,7 @@ test.describe('create, edit, delete', () => {
   test('a new load persists across a reload', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-qty').fill('30.45');
     await page.getByTestId('entry-vehicle').fill('KL 61 D 5401');
 
@@ -103,9 +64,12 @@ test.describe('create, edit, delete', () => {
 
   test('the entry form keeps the crusher and rates for the next load', async ({ page }) => {
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    // setCrusher waits for the chart, so the captured rate is the real one and not
+    // the 0 the cell shows before the seed lands.
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-qty').fill('10');
     const quaryRate = await page.getByTestId('entry-quary-rate').inputValue();
+    expect(quaryRate).not.toBe('0');
     await saveEntry(page);
 
     // Only the quantity clears — consecutive loads from one crusher are the norm.
@@ -307,7 +271,7 @@ test.describe('mobile', () => {
   test('a load can be entered from the phone-width form', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-qty').fill('12.5');
     await saveEntry(page);
 

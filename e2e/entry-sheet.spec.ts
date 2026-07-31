@@ -1,36 +1,18 @@
 import { test, expect, type Page } from '@playwright/test';
+import { saveEntry, setCrusher } from './helpers';
 
 /**
  * The spreadsheet-style entry row, and printing the reports.
  *
  * Entry is used on a tablet or laptop, but must still work on a phone: the grid
  * scrolls sideways inside its own box while the page itself never does.
+ * See ./helpers.ts for why the seed/durability waits matter.
  */
-
-async function saveEntry(page: Page): Promise<void> {
-  // The button is disabled until the store is seeded, so this also waits out the
-  // first-run load rather than saving a row with un-populated rates.
-  await page.getByTestId('entry-save').click();
-  // The quantity clears only once the write has landed.
-  await expect(page.getByTestId('entry-qty')).toHaveValue('');
-}
-
-/**
- * Pick a crusher and wait for the chart to autopopulate the rate cells.
- *
- * Saving before the chart lands would snapshot every rate as 0, so any test that
- * asserts on rates must wait for the prefill rather than assume it. A zero quary
- * rate is the tell that it has not arrived yet.
- */
-async function setCrusher(page: Page, name: string): Promise<void> {
-  await page.getByTestId('entry-crusher').fill(name);
-  await expect(page.getByTestId('entry-quary-rate')).not.toHaveValue('0');
-}
 
 test.describe('sheet entry row', () => {
   test('autopopulates the rate cells from the chart and badges them', async ({ page }) => {
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
 
     // WO Pass is the default; AVK WO Pass is ₹610 quary in the seeded chart.
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
@@ -43,7 +25,7 @@ test.describe('sheet entry row', () => {
 
   test('takes the comm rate from the rate chart, per crusher and pass type', async ({ page }) => {
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
 
     // AVK WO Pass carries the usual ₹20 commission...
     await expect(page.getByTestId('entry-comm-rate')).toHaveValue('20');
@@ -64,14 +46,14 @@ test.describe('sheet entry row', () => {
     await expect(page.getByTestId('settings-saved')).toBeVisible();
 
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('MR Granites');
+    await setCrusher(page, 'MR Granites');
     await page.getByTestId('entry-pass-type').selectOption('Pass');
     await expect(page.getByTestId('entry-comm-rate')).toHaveValue('35');
   });
 
   test('re-autopopulates when the pass type changes', async ({ page }) => {
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
 
     await page.getByTestId('entry-pass-type').selectOption('Pass');
@@ -81,7 +63,7 @@ test.describe('sheet entry row', () => {
 
   test('an overridden rate cell is marked edited and survives re-render', async ({ page }) => {
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
 
     await page.getByTestId('entry-quary-rate').fill('700');
