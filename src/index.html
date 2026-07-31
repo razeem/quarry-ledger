@@ -20,6 +20,28 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="apple-touch-icon" href="icon-192.png" />
 
+    <!--
+      Link previews. These URLs must be absolute and cannot use <base href>:
+      crawlers do not resolve it, and the Pages build rewrites it to the repo
+      subpath anyway. Update them if the site ever moves.
+      Regenerate the card with `node scripts/generate-og-image.mjs`.
+      Twitter falls back to the og:* tags, so only the card type is repeated.
+    -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Quarry Ledger" />
+    <meta property="og:title" content="Quarry Ledger" />
+    <meta property="og:description" content="Offline-first ledger for quarry load brokerage." />
+    <meta property="og:url" content="https://razeem.github.io/quarry-ledger/" />
+    <meta property="og:image" content="https://razeem.github.io/quarry-ledger/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="Quarry Ledger — an offline-first ledger for quarry load brokerage."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

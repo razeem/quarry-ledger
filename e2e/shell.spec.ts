@@ -81,6 +81,33 @@ test('serves an installable PWA manifest and icons', async ({ page, request }) =
   }
 });
 
+test('serves a link-preview card with absolute URLs', async ({ page, request }) => {
+  await page.goto('/entry');
+
+  const meta = (property: string) =>
+    page.locator(`meta[property="${property}"]`).getAttribute('content');
+
+  expect(await meta('og:title')).toBe('Quarry Ledger');
+  expect(await meta('og:image:width')).toBe('1200');
+  expect(await meta('og:image:height')).toBe('630');
+  await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
+    'content',
+    'summary_large_image',
+  );
+
+  // A relative og:image is the classic way a preview silently stops rendering:
+  // crawlers do not resolve <base href>, which the Pages build rewrites anyway.
+  const image = await meta('og:image');
+  expect(image).toMatch(/^https:\/\//);
+  expect(await meta('og:url')).toMatch(/^https:\/\//);
+
+  // The card itself has to be on disk at the name the tag points at.
+  const card = await request.get('/og-image.png');
+  expect(card.ok()).toBe(true);
+  expect(card.headers()['content-type']).toContain('image/png');
+  expect(image?.endsWith('/og-image.png')).toBe(true);
+});
+
 test('serves the app shell offline once the service worker has installed', async ({
   page,
   context,
