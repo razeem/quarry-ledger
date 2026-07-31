@@ -29,6 +29,11 @@ export class LedgerSettingsPage {
   private readonly snackBar = inject(MatSnackBar);
 
   protected readonly ready = this.store.ready;
+  /**
+   * Hydrated *and* seeded. Export, import and erase gate on this so none of them
+   * can act on a store that has not finished filling itself.
+   */
+  protected readonly initialised = this.store.initialised;
   protected readonly rows = this.store.rows;
   protected readonly rateChart = this.store.rateChart;
   protected readonly vehicles = this.store.vehicles;

@@ -8,9 +8,23 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 async function saveEntry(page: Page): Promise<void> {
+  // The button is disabled until the store is seeded, so this also waits out the
+  // first-run load rather than saving a row with un-populated rates.
   await page.getByTestId('entry-save').click();
   // The quantity clears only once the write has landed.
   await expect(page.getByTestId('entry-qty')).toHaveValue('');
+}
+
+/**
+ * Pick a crusher and wait for the chart to autopopulate the rate cells.
+ *
+ * Saving before the chart lands would snapshot every rate as 0, so any test that
+ * asserts on rates must wait for the prefill rather than assume it. A zero quary
+ * rate is the tell that it has not arrived yet.
+ */
+async function setCrusher(page: Page, name: string): Promise<void> {
+  await page.getByTestId('entry-crusher').fill(name);
+  await expect(page.getByTestId('entry-quary-rate')).not.toHaveValue('0');
 }
 
 test.describe('sheet entry row', () => {
@@ -82,7 +96,7 @@ test.describe('sheet entry row', () => {
   test('the override is snapshotted onto the saved row', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-quary-rate').fill('700');
     await page.getByTestId('entry-qty').fill('10');
     await saveEntry(page);
@@ -94,7 +108,7 @@ test.describe('sheet entry row', () => {
 
   test('changing crusher drops a stale override so new chart rates apply', async ({ page }) => {
     await page.goto('/entry');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-quary-rate').fill('999');
     await expect(page.getByTestId('entry-quary-rate')).toHaveValue('999');
 
@@ -125,7 +139,7 @@ test.describe('sheet entry row', () => {
   test('highlights a saved rate that differs from the current chart', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
 
     // Row 1: rates exactly as the chart fills them — nothing to flag.
     await page.getByTestId('entry-qty').fill('10');
@@ -151,7 +165,7 @@ test.describe('sheet entry row', () => {
   }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-rent-rate').fill('456');
     await page.getByTestId('entry-qty').fill('10');
     await saveEntry(page);

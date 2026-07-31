@@ -44,7 +44,7 @@
     </p>
   </app-section-card>
 
-  @if (!ready()) {
+  @if (!initialised()) {
     <p class="app-empty">Loading the ledger…</p>
   } @else if (days().length === 0) {
     <p class="app-empty" data-testid="ledger-empty">

@@ -58,6 +58,8 @@ export class Reports {
   private readonly dialog = inject(MatDialog);
 
   protected readonly ready = this.store.ready;
+  /** Hydrated *and* seeded — see LedgerStore.initialised. */
+  protected readonly initialised = this.store.initialised;
   protected readonly view = signal<ReportView>('daily');
   /** The date driving the Daily summary and Vehicle rent reports. */
   protected readonly date = signal('');

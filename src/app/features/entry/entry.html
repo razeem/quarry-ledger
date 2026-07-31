@@ -284,14 +284,16 @@
         mat-flat-button
         class="!min-h-14 !text-base grow sm:grow-0"
         type="submit"
-        [disabled]="!canSave() || !ready() || saving()"
+        [disabled]="!canSave() || !initialised() || saving()"
         data-testid="entry-save"
       >
         <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
         {{ isEditing() ? 'Update row' : 'Add row' }}
       </button>
 
-      @if (!canSave()) {
+      @if (!initialised()) {
+        <p class="m-0 text-sm text-[var(--text-soft)]">Loading the rate chart…</p>
+      } @else if (!canSave()) {
         <p class="m-0 text-sm text-[var(--text-soft)]">Fill in a crusher and a quantity above 0.</p>
       } @else if (!isEditing()) {
         <p class="m-0 text-sm text-[var(--text-soft)]">

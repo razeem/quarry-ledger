@@ -259,7 +259,7 @@
         <button
           mat-flat-button
           type="button"
-          [disabled]="busy() || !ready()"
+          [disabled]="busy() || !initialised()"
           (click)="exportXlsx()"
           data-testid="settings-export-xlsx"
         >
@@ -269,7 +269,7 @@
         <button
           mat-stroked-button
           type="button"
-          [disabled]="busy() || !ready()"
+          [disabled]="busy() || !initialised()"
           (click)="exportJson()"
           data-testid="settings-export-json"
         >
@@ -286,7 +286,7 @@
             class="app-field"
             type="file"
             accept=".xlsx,.json"
-            [disabled]="busy() || !ready()"
+            [disabled]="busy() || !initialised()"
             (change)="onImportPicked($event, 'merge')"
             data-testid="settings-import-merge"
           />
@@ -303,7 +303,7 @@
             class="app-field"
             type="file"
             accept=".xlsx,.json"
-            [disabled]="busy() || !ready()"
+            [disabled]="busy() || !initialised()"
             (change)="onImportPicked($event, 'replace')"
             data-testid="settings-import-replace"
           />
@@ -321,7 +321,7 @@
         <button
           mat-stroked-button
           type="button"
-          [disabled]="busy() || !ready()"
+          [disabled]="busy() || !initialised()"
           (click)="eraseAll()"
           data-testid="settings-erase"
         >

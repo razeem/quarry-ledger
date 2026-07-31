@@ -9,7 +9,7 @@
       actions
       mat-stroked-button
       type="button"
-      [disabled]="!ready()"
+      [disabled]="!initialised()"
       (click)="print()"
       data-testid="reports-print"
     >
@@ -38,7 +38,7 @@
     </mat-button-toggle-group>
   </div>
 
-  @if (!ready()) {
+  @if (!initialised()) {
     <p class="app-empty no-print">Loading reports…</p>
   } @else {
     <div class="no-print">

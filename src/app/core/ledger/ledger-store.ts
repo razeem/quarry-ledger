@@ -1,4 +1,4 @@
-import { computed, effect, inject, Injectable } from '@angular/core';
+import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { StorageService } from '../storage/storage.service';
 import {
   DEFAULT_SETTINGS,
@@ -122,15 +122,24 @@ export class LedgerStore {
       this.seedStore.ready(),
   );
 
+  /** Set once seeding has run to completion, successfully or not. */
+  private readonly seedSettled = signal(false);
+
   /**
    * True once hydration **and** the first-run seed have both settled.
    *
    * `ready()` alone is not enough: on a fresh device every collection hydrates to
-   * its (empty) default almost immediately, so a feature that seeded its state
-   * from `ready()` would see zero rows and latch onto that. Wait for this instead
-   * before deriving any default from the row set.
+   * its (empty) default almost immediately, so anything driven off `ready()` sees
+   * an empty row set and an empty rate chart. Gate on this before deriving a
+   * default from the rows, before letting a row be saved (its rates would
+   * snapshot as 0), and before exporting (the workbook would come out empty).
+   *
+   * `seedSettled` is part of the condition so a failed seed degrades to a usable
+   * app rather than locking the UI forever.
    */
-  readonly initialised = computed(() => this.ready() && this.seedStore.value().seeded);
+  readonly initialised = computed(
+    () => this.ready() && (this.seedStore.value().seeded || this.seedSettled()),
+  );
 
   readonly rows = computed(() => this.rowsStore.value().rows);
   readonly rateChart = computed(() => this.rateChartStore.value().entries);
@@ -205,6 +214,9 @@ export class LedgerStore {
     } catch (err) {
       console.error('[LedgerStore] Seeding from bundled data failed', err);
       // Leave `seeded` false so a later reload can retry.
+    } finally {
+      // Either way the wait is over — the app must not stay disabled.
+      this.seedSettled.set(true);
     }
   }
 

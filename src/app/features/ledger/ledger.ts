@@ -39,6 +39,8 @@ export class Ledger {
   private readonly router = inject(Router);
 
   protected readonly ready = this.store.ready;
+  /** Hydrated *and* seeded — see LedgerStore.initialised. */
+  protected readonly initialised = this.store.initialised;
   protected readonly from = signal('');
   protected readonly to = signal('');
 

@@ -172,6 +172,12 @@ export class Entry {
   };
 
   protected readonly ready = this.store.ready;
+  /**
+   * Hydrated *and* seeded. Saving is gated on this, not `ready()`: on a first-ever
+   * load the rate chart arrives after hydration, and a row saved in that window
+   * would snapshot every rate as 0.
+   */
+  protected readonly initialised = this.store.initialised;
   /** True while a save is in flight, so the row cannot be added twice. */
   protected readonly saving = signal(false);
   protected readonly crushers = this.store.crusherOptions;
