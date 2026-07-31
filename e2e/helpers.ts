@@ -21,6 +21,33 @@ import { expect, type Page } from '@playwright/test';
 export const SEED_ROWS = 143;
 
 /**
+ * Strings that appear only in the bundled seed JSON, never in app code.
+ *
+ * The seed arrives as content-hashed chunks, so there is no stable filename to
+ * match on — `delaySeedChunks` finds them by looking for these instead.
+ */
+const SEED_MARKERS = ['MR Granites', 'KL 61'];
+
+/**
+ * Hold back the lazily-imported seed chunks by `ms`, so the window where the app
+ * is interactive but unseeded is wide enough to assert on.
+ *
+ * This is the CI-only race made reproducible: four separate e2e failures came
+ * from tests acting inside that window, and none of them reproduced on a fast
+ * machine even at 20x CPU throttle. Call this before `page.goto`.
+ */
+export async function delaySeedChunks(page: Page, ms: number): Promise<void> {
+  await page.route(/chunk-[\w-]+\.js(\?.*)?$/, async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    if (SEED_MARKERS.some((marker) => body.includes(marker))) {
+      await new Promise((resolve) => setTimeout(resolve, ms));
+    }
+    await route.fulfill({ response, body });
+  });
+}
+
+/**
  * All-time figures from `data/golden-totals.json`, as the UI renders them
  * (whole rupees, en-IN grouping). profit = 3062202.03 − 2686790 − 250775.75.
  */

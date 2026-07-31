@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { saveEntry, setCrusher } from './helpers';
+import { delaySeedChunks, saveEntry, setCrusher } from './helpers';
 
 /**
  * The spreadsheet-style entry row, and printing the reports.
@@ -161,12 +161,44 @@ test.describe('sheet entry row', () => {
   test('Enter adds the row without touching the button', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
-    await page.getByTestId('entry-crusher').fill('AVK');
+    // The save button is the form's default button, so Enter cannot submit while
+    // it is still disabled waiting on the seed. setCrusher waits that out.
+    await setCrusher(page, 'AVK');
     await page.getByTestId('entry-qty').fill('9');
     await page.getByTestId('entry-qty').press('Enter');
 
     await expect(page.getByTestId('entry-qty')).toHaveValue('');
     await expect(page.locator('.sheet__saved')).toHaveCount(1);
+  });
+
+  test('a load pressed in before the seed lands is held, never saved with zero rates', async ({
+    page,
+  }) => {
+    // Reproduces the CI-only window locally: interactive form, no rate chart yet.
+    // 'commit' matters — waiting for 'load' would sit out the whole delay, which
+    // is precisely how this window stayed invisible on a fast machine.
+    await delaySeedChunks(page, 6000);
+    await page.goto('/entry', { waitUntil: 'commit' });
+    await page.getByTestId('entry-crusher').fill('AVK');
+    await page.getByTestId('entry-qty').fill('9');
+
+    // Saving is refused rather than snapshotting a row with 0 rates, and the
+    // reason is on screen rather than the keystroke vanishing silently.
+    await expect(page.getByTestId('entry-save')).toBeDisabled();
+    await expect(page.getByTestId('entry-quary-rate')).toHaveValue('0');
+    await page.getByTestId('entry-qty').press('Enter');
+    await expect(page.locator('.sheet__saved')).toHaveCount(0);
+    await expect(page.getByText('Loading the rate chart…')).toBeVisible();
+
+    // The typed quantity survives the wait, and the row saves with real rates.
+    await expect(page.getByTestId('entry-save')).toBeEnabled({ timeout: 15_000 });
+    await expect(page.getByTestId('entry-qty')).toHaveValue('9');
+    await expect(page.getByTestId('entry-quary-rate')).toHaveValue('610');
+    await page.getByTestId('entry-qty').press('Enter');
+
+    await expect(page.getByTestId('entry-qty')).toHaveValue('');
+    await expect(page.locator('.sheet__saved')).toHaveCount(1);
+    await expect(page.locator('.sheet__saved').first()).toContainText('610');
   });
 
   test('the grid scrolls sideways but the page does not, even at 375px', async ({ page }) => {

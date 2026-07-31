@@ -106,11 +106,20 @@ Each of these was a real bug caught by the test suite, not a hypothetical.
 - **In e2e, use `e2e/helpers.ts` — never hand-roll the waits.** The seed arrives as lazy
   chunks, so on a slow runner (CI, notably) the rate cells read `0` for a window after the
   form is interactive. Reading or asserting a rate before `setCrusher()` resolves captures
-  that `0`; saving before it snapshots a row with zero rates. Three separate CI failures
-  were all this one assumption. Likewise `saveEntry` / `saveEdit` / `waitForToast` wait on
-  the app's own durability signals rather than on a timeout. This does not reproduce on a
-  fast machine — even at 20× CPU throttle — so treat the helpers as mandatory, not
-  situational.
+  that `0`; saving before it snapshots a row with zero rates. **Pressing Enter** in that
+  window does nothing at all: the save button is the form's default button and it is
+  disabled until `initialised()`, and HTML blocks implicit submission when the default
+  button is disabled — so the keystroke is silently dropped. Four separate CI failures were
+  all this one assumption. Likewise `saveEntry` / `saveEdit` / `waitForToast` wait on the
+  app's own durability signals rather than on a timeout.
+- **To reproduce that window locally, use `delaySeedChunks()`** — CPU throttling does not
+  do it (not even 20×), because the seed is network-bound, not compute-bound. The helper
+  route-matches the seed chunks **by content** (`SEED_MARKERS`), since their filenames are
+  content-hashed and change every build. Pair it with `goto(url, {waitUntil: 'commit'})`:
+  waiting for `load` sits out the entire delay, which is exactly why this window stayed
+  invisible on a fast machine. `entry-sheet.spec.ts` guards the invariant that matters —
+  a row is never saved with zero rates — and was verified to fail with the same
+  `Expected: "" Received: "9"` CI produced before the fix.
 
 ## Rates and the chart
 
