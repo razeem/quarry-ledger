@@ -1,0 +1,319 @@
+<div class="app-page">
+  <app-page-header
+    [title]="isEditing() ? 'Edit load' : 'Entry'"
+    [subtitle]="account().name + ' — rates and profit split autofill from the party setup.'"
+    icon="add_circle"
+  />
+
+  @if (!initialised()) {
+    <p class="app-empty" data-testid="party-entry-loading">Loading the party ledger…</p>
+  }
+
+  <form
+    class="flex flex-col gap-4"
+    (submit)="$event.preventDefault(); save()"
+    [attr.aria-busy]="saving()"
+  >
+    <app-section-card title="Load" icon="local_shipping">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div>
+          <label class="app-label" for="party-entry-date">Date</label>
+          <input
+            id="party-entry-date"
+            class="app-field"
+            type="date"
+            [ngModel]="date()"
+            (ngModelChange)="date.set($event)"
+            name="date"
+            data-testid="party-entry-date"
+          />
+        </div>
+
+        <div>
+          <label class="app-label" for="party-entry-party">Party</label>
+          <!-- Free text: a brand-new party can be typed straight in. -->
+          <input
+            id="party-entry-party"
+            class="app-field"
+            type="text"
+            list="party-options"
+            autocomplete="off"
+            placeholder="Party"
+            [ngModel]="party()"
+            (ngModelChange)="onPartyChange($event)"
+            name="party"
+            data-testid="party-entry-party"
+          />
+          <datalist id="party-options">
+            @for (name of parties(); track name) {
+              <option [value]="name"></option>
+            }
+          </datalist>
+        </div>
+
+        <div>
+          <label class="app-label" for="party-entry-qty">Qty (t)</label>
+          <input
+            #qtyField
+            id="party-entry-qty"
+            class="app-field"
+            type="number"
+            inputmode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            [ngModel]="qty()"
+            (ngModelChange)="qty.set($event)"
+            name="qty"
+            data-testid="party-entry-qty"
+          />
+        </div>
+
+        <div>
+          <span class="app-label">Vehicle rent</span>
+          <div class="flex rounded-lg overflow-hidden border border-[var(--border)]">
+            <button
+              type="button"
+              class="flex-1 px-2 py-2 text-sm font-semibold transition-colors"
+              [class.bg-[var(--mat-sys-primary-container)]]="withRent()"
+              (click)="onWithRentChange(true)"
+              data-testid="party-entry-with-rent"
+            >
+              With
+            </button>
+            <button
+              type="button"
+              class="flex-1 px-2 py-2 text-sm font-semibold transition-colors"
+              [class.bg-[var(--mat-sys-primary-container)]]="!withRent()"
+              (click)="onWithRentChange(false)"
+              data-testid="party-entry-without-rent"
+            >
+              Without
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="app-label" for="party-entry-vehicle">Vehicle</label>
+          <input
+            id="party-entry-vehicle"
+            class="app-field"
+            type="text"
+            list="party-vehicle-options"
+            autocomplete="off"
+            placeholder="KL 00 …"
+            [ngModel]="vehicle()"
+            (ngModelChange)="onVehicleChange($event)"
+            name="vehicle"
+            data-testid="party-entry-vehicle"
+          />
+          <datalist id="party-vehicle-options">
+            @for (num of vehicles(); track num) {
+              <option [value]="num"></option>
+            }
+          </datalist>
+        </div>
+
+        <div>
+          <label class="app-label" for="party-entry-owner">Owner</label>
+          <input
+            id="party-entry-owner"
+            class="app-field"
+            type="text"
+            autocomplete="off"
+            placeholder="Autofills from vehicle"
+            [ngModel]="owner()"
+            (ngModelChange)="onOwnerEdit($event)"
+            name="owner"
+            data-testid="party-entry-owner"
+          />
+        </div>
+      </div>
+    </app-section-card>
+
+    <app-section-card
+      title="Rates"
+      icon="request_quote"
+      subtitle="Snapshotted onto the row when you save — editing the setup later never changes saved rows."
+    >
+      <div class="grid grid-cols-3 gap-3">
+        @for (
+          rate of [
+            { field: 'quaryRate', label: 'Quary ₹/t', testid: 'party-entry-quary-rate' },
+            { field: 'billRate', label: 'Bill ₹/t', testid: 'party-entry-bill-rate' },
+            { field: 'rentRate', label: 'Rent ₹/t', testid: 'party-entry-rent-rate' },
+          ];
+          track rate.field
+        ) {
+          <div>
+            <label class="app-label flex items-center gap-1" [for]="rate.testid">
+              {{ rate.label }}
+              @switch (rateOrigin($any(rate.field))) {
+                @case ('auto') {
+                  <span
+                    class="text-[0.6rem] font-bold uppercase tracking-wide px-1 rounded bg-[var(--chip-bg)] text-[var(--text-soft)]"
+                    >auto</span
+                  >
+                }
+                @case ('saved') {
+                  <span
+                    class="text-[0.6rem] font-bold uppercase tracking-wide px-1 rounded bg-[var(--chip-bg)] text-[var(--text-soft)]"
+                    >saved</span
+                  >
+                }
+                @case ('edited') {
+                  <span
+                    class="text-[0.6rem] font-bold uppercase tracking-wide px-1 rounded bg-[var(--mat-sys-primary-container)]"
+                    >edited</span
+                  >
+                }
+              }
+            </label>
+            <input
+              [id]="rate.testid"
+              class="app-field app-num"
+              type="number"
+              inputmode="decimal"
+              min="0"
+              [disabled]="rate.field === 'rentRate' && !withRent()"
+              [ngModel]="rateValue($any(rate.field))"
+              (ngModelChange)="onRateEdit($any(rate.field), $event)"
+              [name]="rate.field"
+              [attr.data-testid]="rate.testid"
+            />
+          </div>
+        }
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2" data-testid="party-entry-shares">
+        <span class="app-label !mb-0">Profit split</span>
+        @if (profitShares().length === 0) {
+          <span class="text-sm text-[var(--text-soft)]">none for this mode</span>
+        }
+        @for (share of profitShares(); track share.name) {
+          <span
+            class="text-xs font-semibold px-2 py-1 rounded-full bg-[var(--chip-bg)] app-num"
+          >
+            {{ share.name }} ₹{{ share.perTon }}/t
+          </span>
+        }
+        <span class="text-xs text-[var(--text-soft)]">(edit in Setup)</span>
+      </div>
+    </app-section-card>
+
+    <app-section-card title="This load" icon="calculate">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div>
+          <span class="app-label">Quarry payable</span>
+          <span class="app-num text-lg font-bold" data-testid="party-preview-quarry">{{
+            inr(preview().quarryAmount)
+          }}</span>
+        </div>
+        <div>
+          <span class="app-label">Receivable</span>
+          <span class="app-num text-lg font-bold" data-testid="party-preview-bill">{{
+            inr(preview().billAmount)
+          }}</span>
+        </div>
+        <div>
+          <span class="app-label">Vehicle rent</span>
+          <span class="app-num text-lg font-bold" data-testid="party-preview-rent">{{
+            inr(preview().rentAmount)
+          }}</span>
+        </div>
+        <div>
+          <span class="app-label">Profit (₹{{ perTonProfit() }}/t)</span>
+          <span class="app-num text-lg font-bold" data-testid="party-preview-profit">{{
+            inr(preview().profitAmount)
+          }}</span>
+        </div>
+      </div>
+
+      <div class="mt-4 flex gap-2">
+        <button
+          mat-flat-button
+          type="submit"
+          [disabled]="!canSave() || saving() || !initialised()"
+          data-testid="party-entry-save"
+        >
+          <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
+          {{ isEditing() ? 'Save changes' : 'Add load' }}
+        </button>
+        @if (isEditing()) {
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="cancelEdit()"
+            data-testid="party-entry-cancel"
+          >
+            Cancel
+          </button>
+        }
+      </div>
+    </app-section-card>
+  </form>
+
+  <div class="mt-4">
+    <app-section-card
+      [title]="'Saved · ' + dayLabel()"
+      icon="receipt_long"
+      [subtitle]="dayRows().length + ' loads · ' + tons(dayQty())"
+    >
+      @if (dayRows().length === 0) {
+        <p class="app-empty" data-testid="party-day-empty">No loads on this date yet.</p>
+      } @else {
+        <div class="overflow-x-auto -mx-1 px-1">
+          <table class="app-table" data-testid="party-day-table">
+            <thead>
+              <tr>
+                <th scope="col">Party</th>
+                <th scope="col">Vehicle</th>
+                <th scope="col">Owner</th>
+                <th scope="col" class="app-num">Qty</th>
+                <th scope="col">Rent</th>
+                <th scope="col" class="app-num">Quarry ₹</th>
+                <th scope="col" class="app-num">Bill ₹</th>
+                <th scope="col" class="app-num">Rent ₹</th>
+                <th scope="col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of dayRows(); track row.id) {
+                <tr>
+                  <td>{{ row.party }}</td>
+                  <td>{{ row.vehicle || '—' }}</td>
+                  <td>{{ row.owner || '—' }}</td>
+                  <td class="app-num">{{ row.qty.toFixed(2) }}</td>
+                  <td>{{ row.withRent ? 'With' : 'W/O' }}</td>
+                  <td class="app-num">{{ inr(calc(row).quarryAmount) }}</td>
+                  <td class="app-num">{{ inr(calc(row).billAmount) }}</td>
+                  <td class="app-num">{{ inr(calc(row).rentAmount) }}</td>
+                  <td class="whitespace-nowrap">
+                    <button
+                      mat-icon-button
+                      type="button"
+                      (click)="editRow(row)"
+                      aria-label="Edit row"
+                      [attr.data-testid]="'party-row-edit-' + row.id"
+                    >
+                      <mat-icon>edit</mat-icon>
+                    </button>
+                    <button
+                      mat-icon-button
+                      type="button"
+                      (click)="deleteRow(row)"
+                      aria-label="Delete row"
+                      [attr.data-testid]="'party-row-delete-' + row.id"
+                    >
+                      <mat-icon>delete</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </app-section-card>
+  </div>
+</div>

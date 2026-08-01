@@ -1,0 +1,842 @@
+[
+ {
+  "id": "67f53156d246",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 AS 7477",
+  "owner": "Sooraj",
+  "qty": 30.28,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "7e77b07a7ab4",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 P 8334",
+  "owner": "Ratheeesh 8334",
+  "qty": 30.71,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "6fb77b9bc911",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 C 6064",
+  "owner": "Prashanth",
+  "qty": 32.51,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "d3d7ece73b26",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 U 6040",
+  "owner": "Arun JP",
+  "qty": 34.24,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "558c16b3eada",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 BG 3968",
+  "owner": "Police",
+  "qty": 29.81,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "c00182e22fb7",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 AS 7477",
+  "owner": "Sooraj",
+  "qty": 30.74,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "04be843f7e2c",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 T 5450",
+  "owner": "Brittoli",
+  "qty": 39,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "dd1b4aaf6a4d",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 C 6064",
+  "owner": "Prashanth",
+  "qty": 32.3,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "ff24598ade92",
+  "date": "2025-10-20",
+  "party": "Lakeside Crushers",
+  "item": "Rock",
+  "vehicle": "KL 00 U 6040",
+  "owner": "Arun JP",
+  "qty": 30.92,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "593d85184970",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 BY 0313",
+  "owner": "Westbrook Own",
+  "qty": 30.8,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "a1f10d34302e",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 BA 4183",
+  "owner": "Westbrook Own",
+  "qty": 30.13,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "4d1a7ea40f21",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 BA 9675",
+  "owner": "Westbrook Own",
+  "qty": 31.93,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "03c52a5a12a1",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 M 2074",
+  "owner": "Westbrook Own",
+  "qty": 32.16,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "0afff6f1d8c2",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 BA 4183",
+  "owner": "Westbrook Own",
+  "qty": 31.42,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "0b5d0dcbb067",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 BY 0313",
+  "owner": "Westbrook Own",
+  "qty": 31.82,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "d608d2ac92d0",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 BA 9675",
+  "owner": "Westbrook Own",
+  "qty": 28.95,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "a84386c20553",
+  "date": "2025-10-20",
+  "party": "Westbrook Industries",
+  "item": "Rock",
+  "vehicle": "KL 00 M 2074",
+  "owner": "Westbrook Own",
+  "qty": 30.84,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "635a67d8d288",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 Q 3354",
+  "owner": "Thansi",
+  "qty": 30.39,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "c42e55fe86cf",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 AN 2804",
+  "owner": "Thansi",
+  "qty": 33.08,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "c2a4cd71b423",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 Y 750",
+  "owner": "Thansi",
+  "qty": 33,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "9ffec5d80f22",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 AZ 3689",
+  "owner": "Thansi",
+  "qty": 31.05,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "51c98255b237",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 Q 2041",
+  "owner": "Thansi",
+  "qty": 33.03,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "73319e797d74",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 T 4621",
+  "owner": "Thansi",
+  "qty": 31.94,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "7c15eabfb944",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 AN 2804",
+  "owner": "Thansi",
+  "qty": 32.55,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "857f034aab34",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 F 5846",
+  "owner": "Thansi",
+  "qty": 31.9,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "79932e33f773",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 Q 3354",
+  "owner": "Thansi",
+  "qty": 32.69,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "b31b296ebaa0",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 AZ 3689",
+  "owner": "Thansi",
+  "qty": 32.32,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "e5a4ce760a3c",
+  "date": "2025-10-20",
+  "party": "Meadowline Aggregates",
+  "item": "Rock",
+  "vehicle": "KL 00 T 4621",
+  "owner": "Thansi",
+  "qty": 31.5,
+  "withRent": true,
+  "quaryRate": 550,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 15
+   },
+   {
+    "name": "Shakir",
+    "perTon": 70
+   },
+   {
+    "name": "Thansi",
+    "perTon": 5
+   }
+  ]
+ },
+ {
+  "id": "4bb4451d6dbd",
+  "date": "2025-10-16",
+  "party": "Stonefield Granites",
+  "item": "Rock",
+  "vehicle": "KL 00 X 8760",
+  "owner": "Abhilash",
+  "qty": 40.98,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "77ac7eb69936",
+  "date": "2025-10-16",
+  "party": "Stonefield Granites",
+  "item": "Rock",
+  "vehicle": "KL 00 W 7205",
+  "owner": "Abhilash",
+  "qty": 38.09,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "5a64916801a9",
+  "date": "2025-10-16",
+  "party": "Stonefield Granites",
+  "item": "Rock",
+  "vehicle": "KL 00 X 8725",
+  "owner": "Abhilash",
+  "qty": 39.71,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "5e8c26df57df",
+  "date": "2025-10-16",
+  "party": "Stonefield Granites",
+  "item": "Rock",
+  "vehicle": "KL 00 W 7113",
+  "owner": "Abhilash",
+  "qty": 11.32,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "6e871e517f34",
+  "date": "2025-10-16",
+  "party": "Stonefield Granites",
+  "item": "Rock",
+  "vehicle": "KL 00 B 4600",
+  "owner": "Sree Kovil",
+  "qty": 24.99,
+  "withRent": true,
+  "quaryRate": 580,
+  "billRate": 850,
+  "rentRate": 210,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ },
+ {
+  "id": "4dd8fedadc2d",
+  "date": "2025-10-16",
+  "party": "Stonefield Granites",
+  "item": "Rock",
+  "vehicle": "KL 00 C 1111",
+  "owner": "",
+  "qty": 11.32,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 0,
+  "rentRate": 0,
+  "profitShares": []
+ },
+ {
+  "id": "30bbd9a5089d",
+  "date": "2025-10-17",
+  "party": "Harbour Traders",
+  "item": "Rock",
+  "vehicle": "KL 00 AS 7477",
+  "owner": "Harbour Traders",
+  "qty": 26.92,
+  "withRent": false,
+  "quaryRate": 580,
+  "billRate": 640,
+  "rentRate": 0,
+  "profitShares": [
+   {
+    "name": "Owner",
+    "perTon": 40
+   },
+   {
+    "name": "Adjust",
+    "perTon": 20
+   }
+  ]
+ }
+]

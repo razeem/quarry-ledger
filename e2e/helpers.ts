@@ -65,6 +65,42 @@ export async function setCrusher(page: Page, name: string): Promise<void> {
   await expect(page.getByTestId('entry-quary-rate')).not.toHaveValue('0');
 }
 
+// --- Party ledger ------------------------------------------------------------
+
+/** The party seed ships 35 verified rows across 5 parties. */
+export const PARTY_SEED_ROWS = 35;
+
+/**
+ * Grand totals from `data/party-golden-totals.json`, as the UI renders them
+ * (whole rupees, en-IN grouping).
+ */
+export const PARTY_GOLDEN_RECEIVABLE = '8,55,175';
+export const PARTY_GOLDEN_PAYABLE = '6,18,897';
+export const PARTY_GOLDEN_RENT = '1,67,801';
+export const PARTY_GOLDEN_PROFIT = '75,045';
+
+/** Switch to the seeded sample party book via the sidebar account switcher. */
+export async function openPartyBook(page: Page): Promise<void> {
+  await page.getByTestId('account-switcher').click();
+  await page.getByTestId('account-item-party-sample').click();
+  await expect(page).toHaveURL(/\/party\/entry$/);
+}
+
+/**
+ * Pick a party and wait for its rate config to autopopulate the rate cells —
+ * the party twin of `setCrusher`, guarding the same lazy-seed window.
+ */
+export async function setParty(page: Page, name: string): Promise<void> {
+  await page.getByTestId('party-entry-party').fill(name);
+  await expect(page.getByTestId('party-entry-quary-rate')).not.toHaveValue('0');
+}
+
+/** Save the party entry form; the cleared quantity is the durability signal. */
+export async function savePartyEntry(page: Page): Promise<void> {
+  await page.getByTestId('party-entry-save').click();
+  await expect(page.getByTestId('party-entry-qty')).toHaveValue('');
+}
+
 /**
  * Save the entry form and wait until the write has actually landed.
  *

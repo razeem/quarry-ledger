@@ -180,6 +180,32 @@
   }
 }
 
+/* ---------- Account (book) switcher ---------- */
+.account-switch {
+  flex: 0 0 auto;
+  margin: 0.75rem 0.6rem 0;
+  border: 1px solid var(--border);
+  background: var(--chip-bg);
+
+  &__name {
+    text-align: left;
+    font-weight: 600;
+  }
+  &__chevron {
+    flex: 0 0 auto;
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+    opacity: 0.6;
+  }
+}
+.app-sidenav--rail .account-switch {
+  margin-inline: auto;
+}
+.app-sidenav--rail .account-switch__chevron {
+  display: none;
+}
+
 .nav__item {
   display: flex;
   align-items: center;

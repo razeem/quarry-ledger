@@ -1,0 +1,143 @@
+[
+ {
+  "party": "Lakeside Crushers",
+  "quaryRate": 580,
+  "rentRate": 210,
+  "withRent": {
+   "billRate": 850,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 40
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  },
+  "withoutRent": {
+   "billRate": 650,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 50
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  }
+ },
+ {
+  "party": "Westbrook Industries",
+  "quaryRate": 580,
+  "rentRate": 220,
+  "withRent": {
+   "billRate": 860,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 40
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  },
+  "withoutRent": {
+   "billRate": 640,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 40
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  }
+ },
+ {
+  "party": "Meadowline Aggregates",
+  "quaryRate": 550,
+  "rentRate": 210,
+  "withRent": {
+   "billRate": 850,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 15
+    },
+    {
+     "name": "Shakir",
+     "perTon": 70
+    },
+    {
+     "name": "Thansi",
+     "perTon": 5
+    }
+   ]
+  },
+  "withoutRent": {
+   "billRate": 0,
+   "shares": []
+  }
+ },
+ {
+  "party": "Stonefield Granites",
+  "quaryRate": 580,
+  "rentRate": 210,
+  "withRent": {
+   "billRate": 850,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 40
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  },
+  "withoutRent": {
+   "billRate": 0,
+   "shares": []
+  }
+ },
+ {
+  "party": "Harbour Traders",
+  "quaryRate": 580,
+  "rentRate": 0,
+  "withRent": {
+   "billRate": 850,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 40
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  },
+  "withoutRent": {
+   "billRate": 640,
+   "shares": [
+    {
+     "name": "Owner",
+     "perTon": 40
+    },
+    {
+     "name": "Adjust",
+     "perTon": 20
+    }
+   ]
+  }
+ }
+]

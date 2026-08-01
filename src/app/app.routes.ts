@@ -15,6 +15,10 @@ export interface Pillar {
  * Single source of truth for the app's tabs — the sidebar renders this and the
  * lazy routes below map onto it. Add a section here plus a matching
  * `loadComponent` route; the nav picks it up automatically.
+ *
+ * Each account type has its own tab set: `PILLARS` for the daily book,
+ * `PARTY_PILLARS` for party books. The shell renders whichever matches the
+ * active account (see `App.pillars`).
  */
 export const PILLARS: Pillar[] = [
   {
@@ -47,6 +51,38 @@ export const PILLARS: Pillar[] = [
   },
 ];
 
+/** Tabs for a party book (per-party rates, owner rent, profit splits). */
+export const PARTY_PILLARS: Pillar[] = [
+  {
+    path: 'party/entry',
+    title: 'Entry',
+    icon: 'add_circle',
+    description: 'Log a load against a party.',
+    status: 'active',
+  },
+  {
+    path: 'party/statements',
+    title: 'Statements',
+    icon: 'receipt_long',
+    description: 'Per-party payable, receivable, rent and profit.',
+    status: 'active',
+  },
+  {
+    path: 'party/reports',
+    title: 'Reports',
+    icon: 'insights',
+    description: 'Cross-party summary and owner rent.',
+    status: 'active',
+  },
+  {
+    path: 'party/setup',
+    title: 'Setup',
+    icon: 'tune',
+    description: 'Party rates, profit splits and vehicles.',
+    status: 'active',
+  },
+];
+
 export const routes: Routes = [
   // Entry is the landing tab: fast entry at the quarry is the app's main job.
   { path: '', pathMatch: 'full', redirectTo: 'entry' },
@@ -70,6 +106,27 @@ export const routes: Routes = [
     title: 'Settings · Quarry Ledger',
     loadComponent: () =>
       import('./features/settings/ledger-settings').then((m) => m.LedgerSettingsPage),
+  },
+  {
+    path: 'party/entry',
+    title: 'Party Entry · Quarry Ledger',
+    loadComponent: () => import('./features/party/party-entry').then((m) => m.PartyEntry),
+  },
+  {
+    path: 'party/statements',
+    title: 'Statements · Quarry Ledger',
+    loadComponent: () =>
+      import('./features/party/party-statements').then((m) => m.PartyStatements),
+  },
+  {
+    path: 'party/reports',
+    title: 'Party Reports · Quarry Ledger',
+    loadComponent: () => import('./features/party/party-reports').then((m) => m.PartyReports),
+  },
+  {
+    path: 'party/setup',
+    title: 'Party Setup · Quarry Ledger',
+    loadComponent: () => import('./features/party/party-setup').then((m) => m.PartySetup),
   },
   { path: '**', redirectTo: 'entry' },
 ];

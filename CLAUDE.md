@@ -12,6 +12,13 @@ that way; refer to the business as "the business" or "the quarry".
 run, fully offline, verified against `data/golden-totals.json` by both unit and e2e tests.
 Phase 2 (Supabase sync) is next — see WORK_PLAN.md §5.
 
+**Multi-account books + the party ledger (prototype, awaiting client feedback).** The app
+now hosts multiple self-contained **accounts ("books")**: the original Daily Ledger plus
+any number of **party ledgers** (modelled on the business's second workbook — per-party
+rates, a with/without-rent flag per load, vehicle-owner rent payables, and multi-way
+profit splits). Each book has its own collections, config, tabs and reports; the sidebar
+switcher swaps the whole workspace. See "Accounts and the party ledger" below.
+
 ## Non-negotiables
 
 - **The Daily Ledger row is the single source of truth.** Reports are pure functions
@@ -25,6 +32,40 @@ Phase 2 (Supabase sync) is next — see WORK_PLAN.md §5.
 - Row `id` is immutable — it is the merge key for cross-device import. Never
   regenerate ids on edit.
 - Don't normalise vehicle numbers or crusher names; they are free-text business keys.
+
+## Accounts and the party ledger
+
+- `AccountsStore` (`src/app/core/accounts/`) holds the book registry + active book. Two
+  built-ins always exist: `default` (type `daily`) and `party-sample` (type `party`,
+  seeded from `data/party-*.json` on first activation). Users can create more party
+  books; those start empty.
+- **Key scheme:** the default book keeps the app's original un-prefixed IndexedDB keys
+  (zero migration for existing devices); every other book stores its collections under
+  `acc:<accountId>:<collection>`. `KNOWN_COLLECTIONS` registers **base** names; the
+  transfer summary strips the prefix before classifying, so whole-DB transfers carry
+  every book.
+- `PartyLedgerStore` is the party twin of `LedgerStore` — same non-negotiables: it is
+  the only persistence seam, every mutator is async-durable, wait on `initialised()`
+  (never `ready()`), and rate/split edits never mutate saved rows.
+- **The party engine's rounding contract differs from the daily one.** `round0` is Excel
+  `ROUND(x, 0)` (nearest rupee, half away from zero, epsilon-nudged — `290.51 × 850` is
+  a true `.5` tie). Quarry payable rounds **per row**; receivable, owner rent and profit
+  round **on the aggregate** via `sumRounded` (group by rate → round each product once).
+  Both behaviours are encoded in `data/party-golden-totals.json` — same rule as the daily
+  goldens: if a change breaks them, the change is wrong.
+- The party goldens were cross-asserted against every internally-consistent cell of the
+  source workbook; that workbook's own bugs (a SUMMARY reading the wrong fixed cells, a
+  profit total missing its last share line, two hand-typed amounts contradicting
+  qty × rate) are documented in the golden file's `corrections` and deliberately NOT
+  reproduced.
+- A party row snapshots `quaryRate`, `billRate` (resolved by the `withRent` flag),
+  `rentRate` (0 when without rent) and the resolved `profitShares` list. `owner` is also
+  a per-row snapshot: the same physical vehicle is attributed to different owners on
+  different parties' loads in the real data, so the row's value always wins over the
+  vehicle master.
+- Owner names are free-text business keys like everything else — the seed deliberately
+  preserves a real spelling drift (`Ratheeesh 8334` on rows vs ` Ratheesh 8334` in the
+  master) so the rent report demonstrably surfaces it rather than papering over it.
 
 ## `data/` is sample data, and only the labels are sample
 
@@ -82,10 +123,17 @@ they do.
 ```
 src/domain/            pure types + calc + summaries + reports + merge + formatting.
                        No framework, no I/O, no Angular imports. 100% tested.
-src/app/core/ledger/   LedgerStore (the persistence facade) + LedgerTransfer (xlsx/json).
+src/domain/party/      the party-ledger domain, same purity rules: types, round0/
+                       sumRounded calc, prefill, statements/reports, merge.
+src/app/core/ledger/   LedgerStore + PartyLedgerStore (the persistence facades) +
+                       LedgerTransfer / PartyLedgerTransfer (consolidated xlsx/json;
+                       the party Profit Split cell is `Name:₹/t; …` text, and cell
+                       coercion trims EDGE whitespace only — internal quirks survive).
+src/app/core/accounts/ AccountsStore — the book registry + per-account key scheme.
 src/app/core/          storage (IndexedDB), preferences, cross-device transfer (code/QR).
 src/app/shared/ui/     presentational primitives (page-header, section-card, stat-tile).
-src/app/features/      one folder per tab: entry, ledger, reports, settings.
+src/app/features/      one folder per tab set: entry, ledger, reports, settings (daily);
+                       party/ (entry, statements, reports, setup + new-account dialog).
 ```
 
 - UI never computes business values itself and never touches IndexedDB directly. It reads
@@ -95,11 +143,14 @@ src/app/features/      one folder per tab: entry, ledger, reports, settings.
 - `data/` is the single source of truth for seed + fixtures; import it via the `@data/*`
   path alias rather than copying files into `src/`. The seed modules are dynamically
   imported so they stay out of the initial bundle.
-- `PILLARS` in `src/app/app.routes.ts` drives both the sidebar and the routes — add a tab
-  there plus a matching lazy `loadComponent`.
+- `PILLARS` / `PARTY_PILLARS` in `src/app/app.routes.ts` drive both the sidebar and the
+  routes — the shell renders the set matching the active account's type. Add a tab there
+  plus a matching lazy `loadComponent`. Multi-segment pillar paths must bind as
+  `[routerLink]="'/' + pillar.path"` — the array form encodes the `/` and 404s.
 - New persisted collection? Register its key + version in **both** `COLLECTION_VERSIONS`
-  (`ledger-store.ts`) and `KNOWN_COLLECTIONS` (`transfer.model.ts`), or it will not
-  round-trip through a transfer.
+  (`ledger-store.ts`, or `PARTY_COLLECTION_VERSIONS` in `party-ledger-store.ts`) and
+  `KNOWN_COLLECTIONS` (`transfer.model.ts`, by base name), or it will not round-trip
+  through a transfer.
 
 ## Traps worth remembering
 

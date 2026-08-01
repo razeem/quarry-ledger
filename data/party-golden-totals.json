@@ -1,0 +1,96 @@
+{
+ "note": "Party-ledger golden totals. Labels are sample relabellings; every quantity, rate, date and boolean is byte-identical to the verified source workbook. Numbers were computed with the engine rules (round0 per row for quarry payable; aggregate rounding per rate group for receivable, rent and profit) and cross-asserted in the extractor against every workbook cell that is internally consistent. Unit tests MUST reproduce these exactly.",
+ "corrections": [
+  "The source workbook's SUMMARY reads fixed cells (G18/G36) from every party sheet; one sheet's layout is 4 rows shorter, so its summary picked up an owner-rent cell and a profit cell instead of the real totals. The per-party values here are the correct ones.",
+  "One sheet's profit TOTAL sums G39:G41 and silently drops the last share line; the golden profit includes every share.",
+  "One sheet's Amount column contains two hand-typed values that contradict qty x rate (one stale after a qty edit, one missing). quarryPayable here is engine-derived from qty x rate for every row, matching the sheet's own Calc Amount column."
+ ],
+ "parties": {
+  "Lakeside Crushers": {
+   "loads": 9,
+   "qty": 290.51,
+   "quarryPayable": 168496,
+   "receivable": 246934,
+   "rentPayable": 61007,
+   "ownerRent": {
+    "Sooraj": 12814,
+    "Ratheeesh 8334": 6449,
+    "Prashanth": 13610,
+    "Arun JP": 13684,
+    "Police": 6260,
+    "Brittoli": 8190
+   },
+   "profit": {
+    "Owner": 11620,
+    "Adjust": 5810
+   },
+   "profitTotal": 17430
+  },
+  "Westbrook Industries": {
+   "loads": 8,
+   "qty": 248.05,
+   "quarryPayable": 143869,
+   "receivable": 158752,
+   "rentPayable": 0,
+   "ownerRent": {},
+   "profit": {
+    "Owner": 9922,
+    "Adjust": 4961
+   },
+   "profitTotal": 14883
+  },
+  "Meadowline Aggregates": {
+   "loads": 11,
+   "qty": 353.45,
+   "quarryPayable": 194400,
+   "receivable": 300433,
+   "rentPayable": 74225,
+   "ownerRent": {
+    "Thansi": 74225
+   },
+   "profit": {
+    "Owner": 5302,
+    "Shakir": 24742,
+    "Thansi": 1767
+   },
+   "profitTotal": 31811
+  },
+  "Stonefield Granites": {
+   "loads": 6,
+   "qty": 166.41,
+   "quarryPayable": 96518,
+   "receivable": 131827,
+   "rentPayable": 32569,
+   "ownerRent": {
+    "Abhilash": 27321,
+    "Sree Kovil": 5248
+   },
+   "profit": {
+    "Owner": 6204,
+    "Adjust": 3102
+   },
+   "profitTotal": 9306
+  },
+  "Harbour Traders": {
+   "loads": 1,
+   "qty": 26.92,
+   "quarryPayable": 15614,
+   "receivable": 17229,
+   "rentPayable": 0,
+   "ownerRent": {},
+   "profit": {
+    "Owner": 1077,
+    "Adjust": 538
+   },
+   "profitTotal": 1615
+  }
+ },
+ "all": {
+  "loads": 35,
+  "qty": 1085.34,
+  "quarryPayable": 618897,
+  "receivable": 855175,
+  "rentPayable": 167801,
+  "profitTotal": 75045
+ }
+}

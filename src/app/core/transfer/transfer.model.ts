@@ -59,6 +59,10 @@ export class TransferError extends Error {
  * Collections this build knows how to consume, with their current document
  * versions. KEEP IN SYNC with each store's `bind({ version })`. Add one entry
  * per persisted collection so imports can be previewed and migrated safely.
+ *
+ * Registered by BASE name: a non-default account stores its collections under
+ * `acc:<accountId>:<base>` (see accounts-store.ts), and `summarize` strips that
+ * prefix before looking a key up here, so every book round-trips.
  */
 export const KNOWN_COLLECTIONS: Record<string, { label: string; version: number }> = {
   'ledger-rows': { label: 'Ledger rows', version: 1 },
@@ -67,7 +71,30 @@ export const KNOWN_COLLECTIONS: Record<string, { label: string; version: number 
   'ledger-settings': { label: 'Ledger settings', version: 1 },
   'ledger-seed': { label: 'Seed state', version: 1 },
   preferences: { label: 'Preferences', version: 1 },
+  accounts: { label: 'Accounts', version: 1 },
+  'party-rows': { label: 'Party ledger rows', version: 1 },
+  'party-rates': { label: 'Party rates', version: 1 },
+  'party-vehicles': { label: 'Party vehicles', version: 1 },
+  'party-seed': { label: 'Party seed state', version: 1 },
 };
+
+/** `acc:<accountId>:<base>` -> its parts; a bare key is the default account's. */
+function splitKey(key: string): { accountId: string | null; base: string } {
+  const match = /^acc:([^:]+):(.+)$/.exec(key);
+  return match ? { accountId: match[1], base: match[2] } : { accountId: null, base: key };
+}
+
+/** Best-effort account label for a prefixed key, read from the payload itself. */
+function accountLabel(payload: TransferPayload, accountId: string): string {
+  const data = payload.collections['accounts']?.data;
+  if (isRecord(data) && Array.isArray(data['accounts'])) {
+    const account = (data['accounts'] as { id?: string; name?: string }[]).find(
+      (a) => a?.id === accountId,
+    );
+    if (account?.name) return account.name;
+  }
+  return accountId;
+}
 
 export type CollectionStatus = 'ok' | 'will-migrate' | 'newer-unsupported' | 'unknown';
 
@@ -146,7 +173,8 @@ export async function decode(text: string): Promise<TransferPayload> {
 export function summarize(payload: TransferPayload): TransferSummary {
   const collections = Object.entries(payload.collections).map(
     ([key, envelope]): CollectionSummary => {
-      const known = KNOWN_COLLECTIONS[key];
+      const { accountId, base } = splitKey(key);
+      const known = KNOWN_COLLECTIONS[base];
       const version = envelope?.version ?? 0;
       let status: CollectionStatus;
       if (!known) status = 'unknown';
@@ -154,13 +182,14 @@ export function summarize(payload: TransferPayload): TransferSummary {
       else if (version < known.version) status = 'will-migrate';
       else status = 'newer-unsupported';
 
+      const label = known?.label ?? base;
       return {
         key,
-        label: known?.label ?? key,
+        label: accountId ? `${label} — ${accountLabel(payload, accountId)}` : label,
         version,
         currentVersion: known?.version ?? null,
         status,
-        detail: describe(key, envelope?.data),
+        detail: describe(base, envelope?.data),
       };
     },
   );
@@ -199,7 +228,16 @@ function describe(key: string, data: unknown): string {
     case 'ledger-settings':
       return `discount ₹${String(data['discountRatePerTon'] ?? '')}/t`;
     case 'ledger-seed':
+    case 'party-seed':
       return data['seeded'] === true ? 'seeded' : 'not seeded';
+    case 'accounts':
+      return count(data['accounts'], 'account');
+    case 'party-rows':
+      return count(data['rows'], 'row');
+    case 'party-rates':
+      return count(data['entries'], 'party');
+    case 'party-vehicles':
+      return count(data['list'], 'vehicle');
     case 'preferences': {
       const theme = typeof data['theme'] === 'string' ? data['theme'] : 'system';
       return `theme: ${theme}`;

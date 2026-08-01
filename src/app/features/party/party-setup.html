@@ -1,0 +1,345 @@
+<div class="app-page">
+  <app-page-header
+    title="Setup"
+    [subtitle]="account().name + ' — rates autofill new rows; saved rows keep their snapshots.'"
+    icon="tune"
+  />
+
+  @if (!initialised()) {
+    <p class="app-empty">Loading setup…</p>
+  } @else {
+    <div class="flex flex-col gap-4">
+      <app-section-card
+        title="Party rates &amp; profit splits"
+        icon="request_quote"
+        subtitle="Per party: quarry rate, rent rate, and a bill rate + profit split for each rent mode."
+      >
+        <button
+          actions
+          mat-flat-button
+          type="button"
+          [disabled]="!ratesDirty() || saving()"
+          (click)="saveRates()"
+          data-testid="setup-save-rates"
+        >
+          <mat-icon>save</mat-icon>
+          Save rates
+        </button>
+
+        <div class="flex flex-col gap-4">
+          @for (entry of rates(); track $index) {
+            <div
+              class="rounded-xl border border-[var(--border)] p-4 flex flex-col gap-3"
+              [attr.data-testid]="'setup-party-' + $index"
+            >
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="col-span-2">
+                  <label class="app-label" [for]="'setup-party-name-' + $index">Party</label>
+                  <input
+                    [id]="'setup-party-name-' + $index"
+                    class="app-field"
+                    type="text"
+                    [(ngModel)]="entry.party"
+                    (ngModelChange)="touchRates()"
+                    [name]="'party-' + $index"
+                    placeholder="Party name"
+                  />
+                </div>
+                <div>
+                  <label class="app-label" [for]="'setup-quary-rate-' + $index">Quary ₹/t</label>
+                  <input
+                    [id]="'setup-quary-rate-' + $index"
+                    class="app-field app-num"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    [(ngModel)]="entry.quaryRate"
+                    (ngModelChange)="touchRates()"
+                    [name]="'quary-' + $index"
+                  />
+                </div>
+                <div>
+                  <label class="app-label" [for]="'setup-rent-rate-' + $index">Rent ₹/t</label>
+                  <input
+                    [id]="'setup-rent-rate-' + $index"
+                    class="app-field app-num"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    [(ngModel)]="entry.rentRate"
+                    (ngModelChange)="touchRates()"
+                    [name]="'rent-' + $index"
+                  />
+                </div>
+              </div>
+
+              @for (mode of ['withRent', 'withoutRent']; track mode) {
+                <div class="rounded-lg bg-[var(--chip-bg)] p-3">
+                  <div class="flex flex-wrap items-end gap-3">
+                    <span class="app-label !mb-0 grow">
+                      {{ mode === 'withRent' ? 'With rent' : 'Without rent' }}
+                    </span>
+                    <div>
+                      <label class="app-label" [for]="'setup-bill-' + mode + '-' + $index"
+                        >Bill ₹/t</label
+                      >
+                      <input
+                        [id]="'setup-bill-' + mode + '-' + $index"
+                        class="app-field app-num"
+                        type="number"
+                        inputmode="decimal"
+                        min="0"
+                        [(ngModel)]="$any(entry)[mode].billRate"
+                        (ngModelChange)="touchRates()"
+                        [name]="'bill-' + mode + '-' + $index"
+                      />
+                    </div>
+                  </div>
+
+                  <div class="mt-2 flex flex-col gap-2">
+                    @for (share of $any(entry)[mode].shares; track $index; let shareIndex = $index) {
+                      <div class="flex items-center gap-2">
+                        <input
+                          class="app-field grow"
+                          type="text"
+                          placeholder="Share name"
+                          [(ngModel)]="share.name"
+                          (ngModelChange)="touchRates()"
+                          [name]="'share-name-' + mode + '-' + $index + '-' + shareIndex"
+                          [attr.aria-label]="'Share name'"
+                        />
+                        <input
+                          class="app-field app-num w-24"
+                          type="number"
+                          inputmode="decimal"
+                          placeholder="₹/t"
+                          [(ngModel)]="share.perTon"
+                          (ngModelChange)="touchRates()"
+                          [name]="'share-rate-' + mode + '-' + $index + '-' + shareIndex"
+                          [attr.aria-label]="'Share per ton'"
+                        />
+                        <button
+                          mat-icon-button
+                          type="button"
+                          (click)="removeShare(entry, $any(mode), shareIndex)"
+                          aria-label="Remove share"
+                        >
+                          <mat-icon>close</mat-icon>
+                        </button>
+                      </div>
+                    }
+                    <button
+                      mat-stroked-button
+                      type="button"
+                      class="self-start"
+                      (click)="addShare(entry, $any(mode))"
+                    >
+                      <mat-icon>add</mat-icon>
+                      Add profit share
+                    </button>
+                  </div>
+                </div>
+              }
+
+              <button
+                mat-stroked-button
+                type="button"
+                class="self-start"
+                (click)="removeParty($index)"
+                [attr.data-testid]="'setup-remove-party-' + $index"
+              >
+                <mat-icon>delete</mat-icon>
+                Remove party
+              </button>
+            </div>
+          }
+
+          <button
+            mat-stroked-button
+            type="button"
+            class="self-start"
+            (click)="addParty()"
+            data-testid="setup-add-party"
+          >
+            <mat-icon>add</mat-icon>
+            Add party
+          </button>
+        </div>
+      </app-section-card>
+
+      <app-section-card
+        title="Vehicles"
+        icon="local_shipping"
+        subtitle="Registration → owner. The owner autofills on entry; the row's own value always wins."
+      >
+        <button
+          actions
+          mat-flat-button
+          type="button"
+          [disabled]="!vehiclesDirty() || saving()"
+          (click)="saveVehicles()"
+          data-testid="setup-save-vehicles"
+        >
+          <mat-icon>save</mat-icon>
+          Save vehicles
+        </button>
+
+        <div class="flex flex-col gap-2">
+          @for (vehicle of vehicles(); track $index) {
+            <div class="flex items-center gap-2">
+              <input
+                class="app-field grow"
+                type="text"
+                placeholder="KL 00 …"
+                [(ngModel)]="vehicle.num"
+                (ngModelChange)="touchVehicles()"
+                [name]="'vehicle-num-' + $index"
+                aria-label="Registration"
+              />
+              <input
+                class="app-field grow"
+                type="text"
+                placeholder="Owner"
+                [(ngModel)]="vehicle.owner"
+                (ngModelChange)="touchVehicles()"
+                [name]="'vehicle-owner-' + $index"
+                aria-label="Owner"
+              />
+              <button
+                mat-icon-button
+                type="button"
+                (click)="removeVehicle($index)"
+                aria-label="Remove vehicle"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
+          <button
+            mat-stroked-button
+            type="button"
+            class="self-start"
+            (click)="addVehicle()"
+            data-testid="setup-add-vehicle"
+          >
+            <mat-icon>add</mat-icon>
+            Add vehicle
+          </button>
+        </div>
+      </app-section-card>
+
+      <app-section-card
+        title="Export &amp; import"
+        icon="import_export"
+        subtitle="Consolidated workbook for this book — every export includes the row id used to merge."
+      >
+        <div class="flex flex-wrap gap-3">
+          <button
+            mat-flat-button
+            type="button"
+            [disabled]="saving() || !initialised()"
+            (click)="exportXlsx()"
+            data-testid="party-export-xlsx"
+          >
+            <mat-icon>table_view</mat-icon>
+            Export .xlsx
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="saving() || !initialised()"
+            (click)="exportJson()"
+            data-testid="party-export-json"
+          >
+            <mat-icon>data_object</mat-icon>
+            Backup .json
+          </button>
+        </div>
+
+        <div class="mt-5 flex flex-col gap-3">
+          <div>
+            <label class="app-label" for="party-import-merge"
+              >Import &amp; merge (.xlsx or .json)</label
+            >
+            <input
+              id="party-import-merge"
+              class="app-field"
+              type="file"
+              accept=".xlsx,.json"
+              [disabled]="saving() || !initialised()"
+              (change)="onImportPicked($event, 'merge')"
+              data-testid="party-import-merge"
+            />
+            <p class="text-xs text-[var(--text-soft)] mt-1 mb-0">
+              Deduped by row id: identical rows are skipped, changed rows updated, new rows
+              added. Importing the same file twice changes nothing. The Profit Split column
+              reads as
+              <span class="app-num">Name:₹/t</span> pairs joined by
+              <span class="app-num">;</span> — e.g. <span class="app-num">Owner:40; Adjust:20</span
+              >.
+            </p>
+          </div>
+
+          <div>
+            <label class="app-label" for="party-import-replace"
+              >Restore backup (replaces this book)</label
+            >
+            <input
+              id="party-import-replace"
+              class="app-field"
+              type="file"
+              accept=".xlsx,.json"
+              [disabled]="saving() || !initialised()"
+              (change)="onImportPicked($event, 'replace')"
+              data-testid="party-import-replace"
+            />
+          </div>
+        </div>
+      </app-section-card>
+
+      <app-section-card
+        title="This book"
+        icon="menu_book"
+        subtitle="Each book is fully separate: its own rows, rates, vehicles and reports."
+      >
+        <div class="flex flex-wrap items-end gap-3">
+          <div class="grow max-w-xs">
+            <label class="app-label" for="setup-book-name">Name</label>
+            <input
+              id="setup-book-name"
+              class="app-field"
+              type="text"
+              [ngModel]="bookName()"
+              (ngModelChange)="bookName.set($event)"
+              name="bookName"
+              data-testid="setup-book-name"
+            />
+          </div>
+          <button
+            mat-stroked-button
+            type="button"
+            [disabled]="!bookName().trim() || bookName().trim() === account().name"
+            (click)="renameBook()"
+            data-testid="setup-rename-book"
+          >
+            Rename
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            class="!text-[var(--mat-sys-error)]"
+            (click)="eraseBook()"
+            data-testid="setup-erase-book"
+          >
+            <mat-icon>delete_forever</mat-icon>
+            Erase this book
+          </button>
+        </div>
+        <p class="text-xs text-[var(--text-soft)] mt-3 mb-0">
+          Backup, restore and cross-device transfer live in the global Settings dialog (gear
+          icon) and carry every book.
+        </p>
+      </app-section-card>
+    </div>
+  }
+</div>

@@ -66,11 +66,52 @@
     (openedChange)="mobileOpen.set($event)"
   >
     <div class="sidenav-inner">
+      <button
+        class="nav__item account-switch"
+        type="button"
+        [matMenuTriggerFor]="accountMenu"
+        [matTooltip]="'Book: ' + accounts.active().name"
+        [matTooltipDisabled]="!collapsed() || isHandset()"
+        matTooltipPosition="right"
+        aria-label="Switch book"
+        data-testid="account-switcher"
+      >
+        <mat-icon class="nav__icon" aria-hidden="true">
+          {{ accounts.active().type === 'party' ? 'group' : 'menu_book' }}
+        </mat-icon>
+        <span class="nav__label account-switch__name">{{ accounts.active().name }}</span>
+        <mat-icon class="account-switch__chevron nav__label" aria-hidden="true"
+          >unfold_more</mat-icon
+        >
+      </button>
+
+      <mat-menu #accountMenu="matMenu">
+        @for (account of accounts.accounts(); track account.id) {
+          <button
+            mat-menu-item
+            type="button"
+            (click)="switchAccount(account)"
+            [attr.data-testid]="'account-item-' + account.id"
+          >
+            <mat-icon>{{
+              account.id === accounts.active().id
+                ? 'radio_button_checked'
+                : 'radio_button_unchecked'
+            }}</mat-icon>
+            <span>{{ account.name }}</span>
+          </button>
+        }
+        <button mat-menu-item type="button" (click)="createAccount()" data-testid="account-new">
+          <mat-icon>add</mat-icon>
+          <span>New party ledger…</span>
+        </button>
+      </mat-menu>
+
       <nav class="nav">
-        @for (pillar of pillars; track pillar.path) {
+        @for (pillar of pillars(); track pillar.path) {
           <a
             class="nav__item"
-            [routerLink]="['/', pillar.path]"
+            [routerLink]="'/' + pillar.path"
             routerLinkActive="nav__item--active"
             [routerLinkActiveOptions]="{ exact: true }"
             (click)="closeOnHandset()"
