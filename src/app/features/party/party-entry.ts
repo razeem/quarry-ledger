@@ -26,6 +26,7 @@ import {
 } from '../../core/ledger/party-ledger-store';
 import { computePartyRow, type ComputedPartyRow } from '../../../domain/party/calc';
 import { partyRatePrefill } from '../../../domain/party/rates';
+import { baselineOf, computeRatesFrom, wasTypedOver } from '../../../domain/rate-provenance';
 import { vehicleOwner } from '../../../domain/rates';
 import { formatDate, formatInr, formatTons } from '../../../domain/format';
 import type { PartyLedgerRow, PartyProfitShare } from '../../../domain/party/types';
@@ -75,13 +76,23 @@ const RATE_COLUMNS: readonly { field: RateField; label: string; testid: string }
 /** How many of the date's saved rows to show above the entry row. */
 const VISIBLE_DAY_ROWS = 20;
 
-/** A saved row prepared for display above the entry row (daily-sheet twin). */
+/**
+ * A saved row prepared for display above the entry row (daily-sheet twin).
+ *
+ * `typedOver` comes from the row's own `ratesFrom` record and stays true
+ * whatever the setup does afterwards; `chartMoved` is the quieter "nobody
+ * touched this, but the setup has changed since". See the daily sheet for why
+ * collapsing the two inverts the moment a rate changes.
+ */
 interface SavedRowView {
   row: PartyLedgerRow;
   calc: ComputedPartyRow;
-  differs: Record<RateField, boolean>;
-  /** False when the setup has no entry for this party, so nothing to compare. */
-  comparable: boolean;
+  /** Rate cells this row records as typed over. */
+  typedOver: Record<RateField, boolean>;
+  /** What a typed-over cell held first; `null` when there was no setup entry. */
+  wasValue: Record<RateField, number | null | undefined>;
+  /** Untouched cells whose value the setup no longer agrees with. */
+  chartMoved: Record<RateField, boolean>;
   /** 'draft' rows are staged on this sheet only; 'row' is in the book's ledger. */
   kind: 'row' | 'draft';
   /** A draft still missing what it needs to sync (party / qty). */
@@ -123,8 +134,8 @@ export class PartyEntry {
   protected readonly COLUMNS = COLUMNS;
   protected readonly RATE_COLUMNS = RATE_COLUMNS;
   /** Tooltip on a highlighted saved-row rate cell. */
-  protected readonly DIFFERS_HINT =
-    'This rate does not match the current party setup — it was either typed over on entry or the setup changed afterwards. The row keeps its own snapshot.';
+  protected readonly SETUP_MOVED_HINT =
+    'Not edited — this is what the party setup said when the row was entered. The setup has changed since; the row keeps its own snapshot.';
 
   private readonly qtyCell = viewChild<ElementRef<HTMLInputElement>>('qtyCell');
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
@@ -150,6 +161,14 @@ export class PartyEntry {
 
   /** Rate cells the user typed over, so the prefill won't undo their edit. */
   private readonly overridden = signal<ReadonlySet<RateField>>(new Set());
+
+  /**
+   * The rates and provenance the row under edit loaded with — the baseline a
+   * newly typed cell deviates from. `null` while entering a new row, where the
+   * party setup supplies the baseline instead.
+   */
+  private loadedRates: Record<RateField, number> | null = null;
+  private loadedRatesFrom: string | undefined;
   /** True once the user edited the owner by hand for the current vehicle. */
   private ownerTouched = false;
   /** Guard so loading a row for editing is not clobbered by the prefill effect. */
@@ -231,26 +250,49 @@ export class PartyEntry {
     const rates = this.store.rates();
     return this.dayItems().map(({ row, kind }) => {
       const prefill = partyRatePrefill(rates, row.party, row.withRent);
+      const typedOver = {} as Record<RateField, boolean>;
+      const wasValue = {} as Record<RateField, number | null | undefined>;
+      const chartMoved = {} as Record<RateField, boolean>;
+
+      for (const { field } of RATE_COLUMNS) {
+        typedOver[field] = wasTypedOver(row.ratesFrom, field);
+        wasValue[field] = baselineOf(row.ratesFrom, field);
+        chartMoved[field] =
+          !typedOver[field] && prefill !== undefined && row[field] !== prefill[field];
+      }
+
       return {
         row,
         kind,
         prefix: kind === 'draft' ? ('draft-' as const) : ('row-' as const),
         incomplete: kind === 'draft' && !isPartyDraftComplete(row),
         calc: computePartyRow(row),
-        comparable: prefill !== undefined,
-        differs: {
-          quaryRate: prefill !== undefined && row.quaryRate !== prefill.quaryRate,
-          billRate: prefill !== undefined && row.billRate !== prefill.billRate,
-          rentRate: prefill !== undefined && row.rentRate !== prefill.rentRate,
-        },
+        typedOver,
+        wasValue,
+        chartMoved,
       };
     });
   });
 
-  /** How many visible saved rows carry at least one rate off the setup. */
-  protected readonly rowsDifferingFromSetup = computed(
-    () => this.dayRowViews().filter((v) => Object.values(v.differs).some(Boolean)).length,
+  /** How many visible saved rows record a rate someone typed over. */
+  protected readonly rowsTypedOver = computed(
+    () => this.dayRowViews().filter((v) => Object.values(v.typedOver).some(Boolean)).length,
   );
+  /** How many carry an untouched rate the setup has since moved away from. */
+  protected readonly rowsSetupMoved = computed(
+    () => this.dayRowViews().filter((v) => Object.values(v.chartMoved).some(Boolean)).length,
+  );
+
+  /** Tooltip for a saved row's rate cell, naming what it was changed from. */
+  protected rateHint(view: SavedRowView, field: RateField): string | null {
+    if (view.typedOver[field]) {
+      const was = view.wasValue[field];
+      return was === null || was === undefined
+        ? 'Typed over on entry — there was no party setup entry to compare against.'
+        : `Typed over on entry — the party setup said ${was}.`;
+    }
+    return view.chartMoved[field] ? this.SETUP_MOVED_HINT : null;
+  }
   protected readonly hiddenDayRows = computed(
     () => this.allDayItems().length - this.dayItems().length,
   );
@@ -324,7 +366,34 @@ export class PartyEntry {
       billRate: this.billRate(),
       rentRate: this.withRent() ? this.rentRate() : 0,
       profitShares: this.profitShares(),
+      // Explicit `undefined` rather than omitted: `updateRow` patches with
+      // `{ ...row, ...patch }`, so an absent key would leave stale provenance
+      // behind when a rate is typed back to the setup's value.
+      ratesFrom: this.ratesFromForEntry(),
     };
+  }
+
+  /**
+   * Which rate cells this row deviates from autofill on, and what they held
+   * first. Computed at save time so the baseline is the **final** party/mode's
+   * setup; when editing an existing row the values it loaded with are the
+   * baseline instead. See `src/domain/rate-provenance.ts`.
+   */
+  private ratesFromForEntry(): string | undefined {
+    const prefill = partyRatePrefill(this.store.rates(), this.party(), this.withRent());
+    const loaded = this.loadedRates;
+    const withRent = this.withRent();
+
+    return computeRatesFrom(
+      this.loadedRatesFrom,
+      RATE_COLUMNS.map(({ field }) => ({
+        field,
+        // Matches what `draftFields` actually stores: a without-rent load has
+        // no rent rate at all, so it is never "typed over".
+        value: field === 'rentRate' && !withRent ? 0 : this.rateSignals[field](),
+        autofill: loaded ? loaded[field] : prefill ? prefill[field] : null,
+      })),
+    );
   }
 
   private draft(): PartyLedgerRow {
@@ -445,6 +514,9 @@ export class PartyEntry {
     this.editingKind.set(null);
     this.editSource = 'inline';
     this.qty.set(null);
+    // The next row's rates come from the setup again, not the row just saved.
+    this.loadedRates = null;
+    this.loadedRatesFrom = undefined;
     this.scroller()?.nativeElement.scrollTo({ left: 0 });
     this.qtyCell()?.nativeElement.focus();
   }
@@ -455,6 +527,8 @@ export class PartyEntry {
     this.editingKind.set(null);
     this.editSource = 'inline';
     this.qty.set(null);
+    this.loadedRates = null;
+    this.loadedRatesFrom = undefined;
     // An inline edit stays on the sheet; a Statements edit goes back there.
     if (fromQuery) void this.router.navigate(['/party/statements']);
   }
@@ -474,9 +548,20 @@ export class PartyEntry {
     this.patchCell(view, { qty: Number.isFinite(qty) ? qty : 0 });
   }
 
+  /**
+   * Type over a rate on a saved row, recording what it was changed from. The
+   * cell's current value is its baseline unless one is already recorded — a
+   * cell carrying no record can only have been autofilled.
+   */
   protected patchRate(view: SavedRowView, field: RateField, value: number | string): void {
     const parsed = Number(value);
-    this.patchCell(view, { [field]: Number.isFinite(parsed) ? parsed : 0 });
+    const next = Number.isFinite(parsed) ? parsed : 0;
+    this.patchCell(view, {
+      [field]: next,
+      ratesFrom: computeRatesFrom(view.row.ratesFrom, [
+        { field, value: next, autofill: view.row[field] },
+      ]),
+    });
   }
 
   /** A party typed into a row re-resolves the setup, keeping edited cells. */
@@ -562,6 +647,12 @@ export class PartyEntry {
     this.billRate.set(row.billRate);
     this.rentRate.set(row.rentRate);
     this.profitShares.set(row.profitShares ?? []);
+    this.loadedRates = {
+      quaryRate: row.quaryRate,
+      billRate: row.billRate,
+      rentRate: row.rentRate,
+    };
+    this.loadedRatesFrom = row.ratesFrom;
     queueMicrotask(() => (this.suppressPrefill = false));
   }
 

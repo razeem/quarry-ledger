@@ -129,7 +129,7 @@ test.describe('sheet entry row', () => {
     await expect(page.getByTestId('entry-day-summary')).toContainText('20.00 t');
   });
 
-  test('highlights a saved rate that differs from the current chart', async ({ page }) => {
+  test('highlights a saved rate that was typed over', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');
     await setCrusher(page, 'Riverside Crusher');
@@ -150,8 +150,54 @@ test.describe('sheet entry row', () => {
     await expect(flagged).toHaveCount(1);
     // A draft cell is a live input, so the flagged value is its value.
     await expect(flagged.locator('input')).toHaveValue('777');
+    // The row records what it was typed over FROM, not just that it differs.
+    await expect(flagged).toHaveAttribute('title', /rate chart said 610/);
     // The legend counts it too.
-    await expect(page.locator('body')).toContainText('Differs from the chart');
+    await expect(page.locator('body')).toContainText('Typed over on entry');
+  });
+
+  /**
+   * The reason the row records provenance at all.
+   *
+   * Deciding the badge by comparing against the CURRENT chart inverts the moment
+   * a rate changes: the untouched row starts reading as edited, and the row
+   * someone actually typed reads as automatic. Both labels must survive the
+   * chart catching up to a value that was once an override.
+   */
+  test('a chart change never inverts which row reads as edited', async ({ page }) => {
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await setCrusher(page, 'Riverside Crusher');
+
+    // Row 1 untouched at the chart's 610; row 2 typed over to 777.
+    await page.getByTestId('entry-qty').fill('10');
+    await saveEntry(page);
+    await page.getByTestId('entry-quary-rate').fill('777');
+    await page.getByTestId('entry-qty').fill('11');
+    await saveEntry(page);
+    await expect(page.locator('.sheet__saved--differs')).toHaveCount(1);
+
+    // Next month the chart itself moves to 777 (Riverside Crusher / WO Pass).
+    await page.goto('/settings');
+    const quary = page.getByTestId('rate-quary-12');
+    await expect(quary).toHaveValue('610');
+    await quary.fill('777');
+    await expect(quary).toHaveValue('777');
+
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await expect(page.locator('.sheet__saved')).toHaveCount(2);
+
+    // Still exactly one typed-over cell, and still the 777 one — not the row
+    // nobody touched, which is what the old chart comparison would have flagged.
+    const flagged = page.locator('.sheet__saved--differs');
+    await expect(flagged).toHaveCount(1);
+    await expect(flagged.locator('input')).toHaveValue('777');
+
+    // The untouched row is marked as what it is: correct, but off today's chart.
+    const moved = page.locator('.sheet__saved--moved');
+    await expect(moved).toHaveCount(1);
+    await expect(moved.locator('input')).toHaveValue('610');
   });
 
   test('the highlight survives a reload, since it is derived from the snapshot', async ({
@@ -177,6 +223,11 @@ test.describe('sheet entry row', () => {
     // it is still disabled waiting on the seed. setCrusher waits that out.
     await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-qty').fill('9');
+    // The seed is not the only thing that disables the button: the app is
+    // zoneless, so `fill` returns before the qty signal has re-enabled it, and
+    // HTML blocks implicit submission while the default button is disabled —
+    // the keystroke would be dropped silently rather than failing loudly.
+    await expect(page.getByTestId('entry-save')).toBeEnabled();
     await page.getByTestId('entry-qty').press('Enter');
 
     await expect(page.getByTestId('entry-qty')).toHaveValue('');

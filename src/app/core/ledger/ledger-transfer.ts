@@ -34,9 +34,9 @@ const SHEET_BY_MONTH = 'By Month';
 /**
  * Column order of the Daily Ledger sheet. `id` comes first so it is never lost.
  *
- * Columns A–K are the stored row and stay **literal** — they are what
+ * Columns A–N are the stored row and stay **literal** — they are what
  * `parseXlsx` reads back, so a formula here would break the round trip. The
- * derived columns L–R are appended after them as live formulas.
+ * derived columns O–U are appended after them as live formulas.
  */
 const LEDGER_COLUMNS = [
   { header: 'id', key: 'id', width: 16 },
@@ -53,6 +53,10 @@ const LEDGER_COLUMNS = [
   // Typed-over amounts. STORED, not derived: blank means "use the formula".
   { header: 'Quary Amount Override', key: 'quaryAmountOverride', width: 20 },
   { header: 'Vehicle Rent Override', key: 'vehicleRentOverride', width: 20 },
+  // Which rates were typed over and what the chart said first, as
+  // `quaryRate:650;rentRate:250`. STORED provenance — nothing computes from it,
+  // and blank means every rate matched the chart when the row was entered.
+  { header: 'Rate Changes', key: 'ratesFrom', width: 26 },
   // --- derived, written as formulas over the columns above -------------------
   { header: 'Crusher Amount', key: 'crusherAmount', width: 15 },
   { header: 'Quary Amount', key: 'quaryAmount', width: 14 },
@@ -77,13 +81,14 @@ const L = {
   vehicle: 'K',
   quaryOverride: 'L',
   rentOverride: 'M',
-  crusherAmount: 'N',
-  quaryAmount: 'O',
-  vehicleTon: 'P',
-  vehicleRent: 'Q',
-  profit: 'R',
-  discountQty: 'S',
-  discount: 'T',
+  ratesFrom: 'N',
+  crusherAmount: 'O',
+  quaryAmount: 'P',
+  vehicleTon: 'Q',
+  vehicleRent: 'R',
+  profit: 'S',
+  discountQty: 'T',
+  discount: 'U',
 } as const;
 
 interface ExcelJsModule {
@@ -188,6 +193,7 @@ export class LedgerTransfer {
         // it does in the app.
         quaryAmountOverride: row.quaryAmountOverride ?? null,
         vehicleRentOverride: row.vehicleRentOverride ?? null,
+        ratesFrom: row.ratesFrom ?? null,
         crusherAmount: formulaCell(`${L.qty}${r}*${L.crusherRate}${r}`, c.crusherAmount),
         quaryAmount: formulaCell(
           `IF(${L.quaryOverride}${r}="",ROUND(${L.qty}${r}*${L.quaryRate}${r},-1),` +
@@ -459,6 +465,7 @@ export class LedgerTransfer {
           // a 0 override is a real instruction to settle at nothing.
           ...optionalNum('quaryAmountOverride', cell('quary amount override')),
           ...optionalNum('vehicleRentOverride', cell('vehicle rent override')),
+          ...optionalStr('ratesFrom', cell('rate changes')),
         });
       });
     }
@@ -543,7 +550,20 @@ function normaliseRow(raw: Record<string, unknown>): LedgerRow {
     vehicle: str(raw['vehicle']),
     ...optionalNum('quaryAmountOverride', raw['quaryAmountOverride']),
     ...optionalNum('vehicleRentOverride', raw['vehicleRentOverride']),
+    ...optionalStr('ratesFrom', raw['ratesFrom']),
   };
+}
+
+/**
+ * An optional text field, as a spreadable fragment.
+ *
+ * Blank means "nothing recorded" and must leave the key OFF the row: an empty
+ * string would read as provenance that exists but says nothing, and would then
+ * differ from an untouched row in the merge comparison.
+ */
+function optionalStr(key: 'ratesFrom', value: unknown): Partial<LedgerRow> {
+  const text = str(value);
+  return text === '' ? {} : { [key]: text };
 }
 
 /**

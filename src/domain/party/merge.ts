@@ -24,6 +24,8 @@ const ROW_FIELDS = [
   'quaryRate',
   'billRate',
   'rentRate',
+  // Rate provenance — a plain string, so `===` compares it correctly.
+  'ratesFrom',
 ] as const;
 
 function sharesEqual(a: readonly PartyProfitShare[], b: readonly PartyProfitShare[]): boolean {

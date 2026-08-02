@@ -26,6 +26,7 @@ import {
 import { deleteRowWithUndo } from '../../shared/ledger/undo-delete';
 import { computeRow, hasOverride, type ComputedRow } from '../../../domain/calc';
 import { formatDate, formatInr, formatTons } from '../../../domain/format';
+import { baselineOf, computeRatesFrom, wasTypedOver } from '../../../domain/rate-provenance';
 import { ratePrefill } from '../../../domain/rates';
 import { summarize } from '../../../domain/summaries';
 import type { LedgerRow, PassType } from '../../../domain/types';
@@ -96,18 +97,27 @@ const VISIBLE_DAY_ROWS = 20;
 /**
  * A saved row prepared for display above the entry row.
  *
- * `differs` flags the rate cells whose snapshot does not match what the rate chart
- * would fill in **today**. That covers a rate typed over at entry time, and also a
- * row entered before the chart was changed — the row itself does not record which,
- * so the highlight is deliberately labelled "differs from the chart" rather than
- * "was edited".
+ * The two rate flags answer genuinely different questions, and conflating them
+ * is what the row's `ratesFrom` provenance exists to stop:
+ *
+ * - `typedOver` — a human changed this cell, recorded on the row itself. Stays
+ *   true forever, whatever the chart does afterwards.
+ * - `chartMoved` — nobody touched this cell, but the chart has changed since.
+ *   Informational; the row rightly keeps its own snapshot.
+ *
+ * Before provenance was recorded, both showed as one "differs from the chart"
+ * highlight — which inverted the moment a rate changed, labelling every
+ * untouched historical row as edited and every typed-over row as automatic.
  */
 interface SavedRowView {
   row: LedgerRow;
   calc: ComputedRow;
-  differs: Record<RateField, boolean>;
-  /** False when the chart has no entry for this crusher + pass, so nothing to compare. */
-  comparable: boolean;
+  /** Rate cells this row records as typed over. */
+  typedOver: Record<RateField, boolean>;
+  /** What a typed-over cell held first; `null` when there was no chart entry. */
+  wasValue: Record<RateField, number | null | undefined>;
+  /** Untouched cells whose value the chart no longer agrees with. */
+  chartMoved: Record<RateField, boolean>;
   /** 'draft' rows are staged on this sheet only; 'row' is in the base ledger. */
   kind: 'row' | 'draft';
   /** A draft still missing what it needs to sync (crusher / qty). */
@@ -165,8 +175,8 @@ export class Entry {
   /** Tooltip on a highlighted saved-row rate cell. */
   protected readonly OVERRIDE_HINT =
     'Typed over the calculated amount \u2014 clear the cell to go back to the formula';
-  protected readonly DIFFERS_HINT =
-    'This rate does not match the current rate chart — it was either typed over on entry or the chart changed afterwards. The row keeps its own snapshot.';
+  protected readonly CHART_MOVED_HINT =
+    'Not edited — this is what the rate chart said when the row was entered. The chart has changed since; the row keeps its own snapshot.';
 
   private readonly qtyCell = viewChild<ElementRef<HTMLInputElement>>('qtyCell');
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
@@ -200,6 +210,17 @@ export class Entry {
 
   /** Rate cells the user has typed over, so they are not relabelled 'auto'. */
   private readonly overridden = signal<ReadonlySet<RateField>>(new Set());
+
+  /**
+   * The rates and provenance the row under edit loaded with.
+   *
+   * `loadedRates` is the baseline any *newly* typed cell deviates from — for a
+   * saved row that is the value it already held, which (carrying no record of
+   * its own) can only have come from autofill. `null` while entering a new row,
+   * where the chart supplies the baseline instead.
+   */
+  private loadedRates: Record<RateField, number> | null = null;
+  private loadedRatesFrom: string | undefined;
 
   /**
    * Settled amounts typed into the ENTRY row, before the load is saved.
@@ -305,6 +326,19 @@ export class Entry {
 
     return this.dayItems().map(({ row, kind }) => {
       const prefill = ratePrefill(chart, row.crusher, row.passType, discount);
+      const typedOver = {} as Record<RateField, boolean>;
+      const wasValue = {} as Record<RateField, number | null | undefined>;
+      const chartMoved = {} as Record<RateField, boolean>;
+
+      for (const { field } of RATE_COLUMNS) {
+        typedOver[field] = wasTypedOver(row.ratesFrom, field);
+        wasValue[field] = baselineOf(row.ratesFrom, field);
+        // Only meaningful for a cell nobody touched: a typed-over cell is
+        // *supposed* to disagree with the chart, so saying so adds nothing.
+        chartMoved[field] =
+          !typedOver[field] && prefill !== undefined && row[field] !== prefill[field];
+      }
+
       return {
         row,
         kind,
@@ -315,21 +349,35 @@ export class Entry {
         },
         incomplete: kind === 'draft' && !isDraftComplete(row),
         calc: computeRow(row),
-        comparable: prefill !== undefined,
-        differs: {
-          quaryRate: prefill !== undefined && row.quaryRate !== prefill.quaryRate,
-          crusherRate: prefill !== undefined && row.crusherRate !== prefill.crusherRate,
-          rentRate: prefill !== undefined && row.rentRate !== prefill.rentRate,
-          commRate: prefill !== undefined && row.commRate !== prefill.commRate,
-        },
+        typedOver,
+        wasValue,
+        chartMoved,
       };
     });
   });
 
-  /** How many visible saved rows carry at least one rate off the current chart. */
-  protected readonly rowsDifferingFromChart = computed(
-    () => this.dayRowViews().filter((v) => Object.values(v.differs).some(Boolean)).length,
+  /** How many visible saved rows record a rate someone typed over. */
+  protected readonly rowsTypedOver = computed(
+    () => this.dayRowViews().filter((v) => Object.values(v.typedOver).some(Boolean)).length,
   );
+  /** How many carry an untouched rate the chart has since moved away from. */
+  protected readonly rowsChartMoved = computed(
+    () => this.dayRowViews().filter((v) => Object.values(v.chartMoved).some(Boolean)).length,
+  );
+
+  /**
+   * The tooltip for a saved row's rate cell — naming what it was changed from
+   * when that is known, since "was 650" is the whole point of recording it.
+   */
+  protected rateHint(view: SavedRowView, field: RateField): string | null {
+    if (view.typedOver[field]) {
+      const was = view.wasValue[field];
+      return was === null || was === undefined
+        ? 'Typed over on entry — there was no rate chart entry to compare against.'
+        : `Typed over on entry — the rate chart said ${was}.`;
+    }
+    return view.chartMoved[field] ? this.CHART_MOVED_HINT : null;
+  }
   protected readonly hiddenDayRows = computed(
     () => this.allDayItems().length - this.dayItems().length,
   );
@@ -400,8 +448,18 @@ export class Entry {
    */
   private suppressPrefill = false;
 
-  /** The row's fields as currently entered, without an id. */
+  /**
+   * The row's fields as currently entered, without an id.
+   *
+   * The optional fields are written as explicit `undefined` rather than omitted:
+   * `updateRow` patches with `{ ...row, ...patch }`, where an absent key leaves
+   * the old value in place — so omitting them would make clearing an override
+   * (or typing a rate back to the chart's value) silently do nothing on an edit.
+   * `undefined` is dropped by JSON and skipped by the merge's canonical form, so
+   * a new row is unaffected.
+   */
   private draftFields(): LedgerRowDraft {
+    const amounts = this.amountOverrides();
     return {
       date: this.date(),
       item: this.item().trim() || 'Rock',
@@ -414,13 +472,47 @@ export class Entry {
       commRate: this.commRate(),
       vehicle: this.vehicle(),
       // Absent when untouched, so the row stays computed rather than pinned.
-      ...(this.amountOverrides().quaryAmountOverride === null
-        ? {}
-        : { quaryAmountOverride: this.amountOverrides().quaryAmountOverride as number }),
-      ...(this.amountOverrides().vehicleRentOverride === null
-        ? {}
-        : { vehicleRentOverride: this.amountOverrides().vehicleRentOverride as number }),
+      quaryAmountOverride: amounts.quaryAmountOverride ?? undefined,
+      vehicleRentOverride: amounts.vehicleRentOverride ?? undefined,
+      ratesFrom: this.ratesFromForEntry(),
     };
+  }
+
+  /**
+   * Which rate cells this row deviates from autofill on, and what they held
+   * first — the row's `ratesFrom`.
+   *
+   * Computed at save time rather than tracked per keystroke, because the
+   * baseline is whatever the **final** crusher's chart says: type over a rate
+   * and then switch crusher, and the row is saved against the new crusher, so
+   * that is the chart it genuinely deviates from.
+   *
+   * When editing an existing row the values it loaded with are the baseline
+   * instead. Re-deriving from today's chart is precisely the mistake this field
+   * exists to record around.
+   */
+  private ratesFromForEntry(): string | undefined {
+    const discount = this.store.discountRate();
+    const prefill = ratePrefill(this.store.rateChart(), this.crusher(), this.passType(), discount);
+    const loaded = this.loadedRates;
+
+    return computeRatesFrom(
+      this.loadedRatesFrom,
+      RATE_COLUMNS.map(({ field }) => ({
+        field,
+        value: this.rateSignals[field](),
+        // With no chart entry there is nothing to compare against — except
+        // comm, which a fresh row defaults to the global rate. Same baseline
+        // rule as `chartRatePatch`.
+        autofill: loaded
+          ? loaded[field]
+          : prefill
+            ? prefill[field]
+            : field === 'commRate'
+              ? discount
+              : null,
+      })),
+    );
   }
 
   /** The draft as a full row, for the live preview only — 'preview' is never saved. */
@@ -543,6 +635,9 @@ export class Entry {
     // A settled amount belongs to one load. Carrying it to the next would pin a
     // figure the user never typed for it.
     this.amountOverrides.set({ quaryAmountOverride: null, vehicleRentOverride: null });
+    // The next row's rates come from the chart again, not from the row just saved.
+    this.loadedRates = null;
+    this.loadedRatesFrom = undefined;
     this.scroller()?.nativeElement.scrollTo({ left: 0 });
     this.qtyCell()?.nativeElement.focus();
   }
@@ -554,6 +649,8 @@ export class Entry {
     this.editSource = 'inline';
     this.qty.set(null);
     this.amountOverrides.set({ quaryAmountOverride: null, vehicleRentOverride: null });
+    this.loadedRates = null;
+    this.loadedRatesFrom = undefined;
     // An inline edit stays on the sheet; a Ledger-tab edit goes back there.
     if (fromQuery) void this.router.navigate(['/ledger']);
   }
@@ -654,9 +751,23 @@ export class Entry {
     this.patchCell(view, { [field]: parsed === wouldBe ? undefined : parsed });
   }
 
+  /**
+   * Type over a rate on a saved row, recording what it was changed from.
+   *
+   * The cell's current value is its baseline unless one is already recorded: a
+   * cell carrying no record can only have been autofilled. An already-recorded
+   * baseline wins, so editing twice still remembers the original — and typing
+   * the cell back to it drops the record, leaving the row honestly untouched.
+   */
   protected patchRate(view: SavedRowView, field: RateField, value: number | string): void {
     const parsed = Number(value);
-    this.patchCell(view, { [field]: Number.isFinite(parsed) ? parsed : 0 });
+    const next = Number.isFinite(parsed) ? parsed : 0;
+    this.patchCell(view, {
+      [field]: next,
+      ratesFrom: computeRatesFrom(view.row.ratesFrom, [
+        { field, value: next, autofill: view.row[field] },
+      ]),
+    });
   }
 
   /** A crusher typed into a row re-resolves the chart, like the entry row. */
@@ -754,6 +865,13 @@ export class Entry {
     this.crusherRate.set(row.crusherRate);
     this.rentRate.set(row.rentRate);
     this.commRate.set(row.commRate);
+    this.loadedRates = {
+      quaryRate: row.quaryRate,
+      crusherRate: row.crusherRate,
+      rentRate: row.rentRate,
+      commRate: row.commRate,
+    };
+    this.loadedRatesFrom = row.ratesFrom;
     this.amountOverrides.set({
       quaryAmountOverride: row.quaryAmountOverride ?? null,
       vehicleRentOverride: row.vehicleRentOverride ?? null,

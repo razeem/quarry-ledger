@@ -179,6 +179,25 @@ describe('daily continuity workbook', () => {
     expect(parsed.rows?.[1].vehicleRentOverride).toBe(0);
     expect('quaryAmountOverride' in (parsed.rows?.[2] ?? {})).toBe(false);
   }, 60_000);
+
+  it('round-trips rate provenance, keeping blank distinct from empty', async () => {
+    const transfer = new LedgerTransfer();
+    const rows: LedgerRow[] = [
+      { ...SNAPSHOT.rows[0], id: 'rp1', ratesFrom: 'quaryRate:650;rentRate:250' },
+      // Typed with no chart entry to compare against — an empty baseline.
+      { ...SNAPSHOT.rows[1], id: 'rp2', ratesFrom: 'quaryRate:' },
+      // Untouched: the key must come back ABSENT, not as ''. An empty string
+      // would differ from an untouched row in `rowsEqual` and report a
+      // spurious update on every merge.
+      { ...SNAPSHOT.rows[2], id: 'rp3' },
+    ];
+    const blob = await transfer.exportXlsx({ ...SNAPSHOT, rows }, 'continuity-provenance.xlsx');
+    const parsed = await transfer.parseXlsx(await blob.arrayBuffer());
+
+    expect(parsed.rows).toEqual(rows);
+    expect(parsed.rows?.[1].ratesFrom).toBe('quaryRate:');
+    expect('ratesFrom' in (parsed.rows?.[2] ?? {})).toBe(false);
+  }, 60_000);
 });
 
 describe('party continuity workbook', () => {
@@ -216,5 +235,18 @@ describe('party continuity workbook', () => {
     const blob = await transfer.exportXlsx(PARTY_SNAPSHOT, 'party-roundtrip.xlsx');
     const parsed = await transfer.parseXlsx(await blob.arrayBuffer());
     expect(parsed.rows).toEqual(PARTY_SNAPSHOT.rows);
+  }, 60_000);
+
+  it('round-trips rate provenance alongside the compact profit split', async () => {
+    const transfer = new PartyLedgerTransfer();
+    const rows: PartyLedgerRow[] = [
+      { ...PARTY_SNAPSHOT.rows[0], id: 'prp1', ratesFrom: 'billRate:850' },
+      { ...PARTY_SNAPSHOT.rows[1], id: 'prp2' },
+    ];
+    const blob = await transfer.exportXlsx({ ...PARTY_SNAPSHOT, rows }, 'party-provenance.xlsx');
+    const parsed = await transfer.parseXlsx(await blob.arrayBuffer());
+
+    expect(parsed.rows).toEqual(rows);
+    expect('ratesFrom' in (parsed.rows?.[1] ?? {})).toBe(false);
   }, 60_000);
 });

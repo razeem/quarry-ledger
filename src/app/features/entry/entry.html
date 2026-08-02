@@ -130,15 +130,18 @@
                   />
                 </td>
                 <!--
-                  A rate that no longer matches the chart is highlighted, so an
-                  overridden row stands out from the autopopulated ones. On a
-                  draft the cell is a live input; the highlight is the same.
+                  Two distinct states, from the row's own record rather than from
+                  today's chart: a cell someone typed over is highlighted and
+                  names what it was changed from, while an untouched cell the
+                  chart has since moved away from gets only a quiet marker. On a
+                  draft the cell is a live input; the marks are the same.
                 -->
                 @for (rate of RATE_COLUMNS; track rate.field) {
                   <td
                     class="sheet__editcell"
-                    [class.sheet__saved--differs]="view.differs[rate.field]"
-                    [attr.title]="view.differs[rate.field] ? DIFFERS_HINT : null"
+                    [class.sheet__saved--differs]="view.typedOver[rate.field]"
+                    [class.sheet__saved--moved]="view.chartMoved[rate.field]"
+                    [attr.title]="rateHint(view, rate.field)"
                   >
                     <input
                       class="sheet__cell sheet__cell--num"
@@ -542,12 +545,19 @@
       </span>
       <span class="inline-flex items-center gap-1.5">
         <span class="legend-swatch legend-swatch--edited"></span>
-        Differs from the chart
-        @if (rowsDifferingFromChart() > 0) {
-          ({{ rowsDifferingFromChart() }}
-          {{ rowsDifferingFromChart() === 1 ? 'row' : 'rows' }} below)
+        Typed over on entry
+        @if (rowsTypedOver() > 0) {
+          ({{ rowsTypedOver() }}
+          {{ rowsTypedOver() === 1 ? 'row' : 'rows' }} below)
         }
       </span>
+      @if (rowsChartMoved() > 0) {
+        <span class="inline-flex items-center gap-1.5">
+          <span class="legend-swatch legend-swatch--moved"></span>
+          Chart has changed since ({{ rowsChartMoved() }}
+          {{ rowsChartMoved() === 1 ? 'row' : 'rows' }} below)
+        </span>
+      }
       <span class="inline-flex items-center gap-1.5">
         <span class="sheet__draft-chip">draft</span>
         Staged here until “Save to ledger”

@@ -55,6 +55,19 @@ export interface PartyLedgerRow extends SyncFields {
   rentRate: number;
   /** The per-ton profit split (snapshot). May be empty. */
   profitShares: PartyProfitShare[];
+
+  /**
+   * Which rate cells were typed over, and what the party's setup said first —
+   * e.g. `billRate:850`. Absent means every rate matched the setup at entry
+   * time. Same field and same encoding as the daily ledger's; see
+   * `src/domain/rate-provenance.ts`.
+   *
+   * Covers the three scalar rates only. `profitShares` is a list, so it does not
+   * fit `field:value` — if per-load split changes ever need provenance, the
+   * baseline would nest the workbook's existing `Owner:40|Adjust:20` form rather
+   * than gain a second field.
+   */
+  ratesFrom?: string;
 }
 
 /** The rates + profit split one of a party's two modes resolves to. */

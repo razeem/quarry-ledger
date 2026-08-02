@@ -94,6 +94,19 @@ export interface LedgerRow extends SyncFields {
    * paid despite a rate being on file.
    */
   vehicleRentOverride?: number;
+
+  /**
+   * Which rate cells were typed over, and what the chart said first — e.g.
+   * `quaryRate:650;rentRate:250`. Absent means every rate matched the chart at
+   * entry time.
+   *
+   * Provenance only: nothing calculates from it, so the golden totals cannot
+   * move. It exists because a rate that differs from *today's* chart says
+   * nothing about who set it — see `src/domain/rate-provenance.ts` for why
+   * comparing against the current chart gets it exactly backwards once rates
+   * change.
+   */
+  ratesFrom?: string;
 }
 
 /** One rate-chart entry: the pre-fill source for a crusher + pass type. */

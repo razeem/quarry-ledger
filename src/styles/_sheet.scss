@@ -233,9 +233,10 @@
   color: var(--text);
 }
 
-// A saved rate that no longer matches the chart: same tint as an edited entry
-// cell, so "overridden" reads identically whether it is being typed or reviewed.
-// The left marker keeps it distinguishable without relying on colour alone.
+// A saved rate someone typed over, per the row's own `ratesFrom` record: same
+// tint as an edited entry cell, so "overridden" reads identically whether it is
+// being typed or reviewed. The left marker keeps it distinguishable without
+// relying on colour alone.
 .sheet__saved--differs {
   position: relative;
   background: color-mix(in srgb, var(--accent-2) 20%, transparent);
@@ -253,6 +254,18 @@
   }
 }
 
+// An untouched rate the chart has since moved away from. Deliberately quieter
+// than an override: the row is correct and nobody did anything to it, so this
+// is context rather than a flag. A dashed underline instead of a fill keeps it
+// from competing with the typed-over tint on the same sheet.
+.sheet__saved--moved {
+  position: relative;
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-color: color-mix(in srgb, var(--text-soft) 70%, transparent);
+  text-underline-offset: 3px;
+}
+
 // ---- Legend swatches ----
 .legend-swatch {
   display: inline-block;
@@ -267,6 +280,12 @@
   }
   &--edited {
     background: color-mix(in srgb, var(--accent-2) 40%, transparent);
+  }
+  // Mirrors the dashed underline on the cell rather than a fill.
+  &--moved {
+    background: transparent;
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--text-soft) 70%, transparent);
   }
 }
 

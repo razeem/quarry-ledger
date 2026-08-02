@@ -163,9 +163,11 @@ above it, and the grid scrolls sideways inside its own box (the page never does,
 375px). Optimised for tablet and laptop, where this data gets entered.
 
 - A rate cell is badged `auto` (from the chart/setup), `saved` (an existing row's
-  snapshot) or `edited` (typed over). Saved rows highlight any rate that no longer matches
-  the chart — which means "differs from today's chart", since a row does not record
-  whether it was typed over or the chart changed later.
+  snapshot) or `edited` (typed over). On saved rows the two states come from the row's
+  own `ratesFrom` record, never from today's chart: **typed over** (highlighted, and the
+  tooltip names what it was changed from) and **chart moved since** (a quiet dashed
+  underline — the row is untouched and correct). See "Rate provenance" below for why
+  deciding this by comparison is not merely vague but inverts.
 - **Every row on the sheet is live cells** — staged drafts and rows already in the ledger
   alike. Each field edits in place and persists immediately through `patchCell`, which
   routes to `updateDraft` or `updateRow` by row kind. A crusher/party typed into any row
@@ -273,9 +275,11 @@ business-continuity plan, and it matters more than it looks: on the free Supabas
 there are no server backups, and a mistaken delete now replicates to every device by
 design. A monthly export kept off the devices is the restore point.
 
-- **Stored columns stay literal; derived columns are formulas.** Daily A–K and party A–L
+- **Stored columns stay literal; derived columns are formulas.** Daily A–N and party A–M
   are what `parseXlsx` reads back, so a formula there would break the merge round trip —
-  which is asserted. The derived columns are appended after them.
+  which is asserted. The derived columns are appended after them. Adding a stored column
+  shifts every derived letter: both files route every formula through their `L` / `P`
+  letter maps so this is a one-line change, and it must stay that way.
 - **Every formula ships with the value our engine computed** (`{ formula, result }` via
   `formulaCell`). Formula-only cells render blank in Google Sheets, Numbers and Excel
   mobile until something forces a recalculation, which reads as a broken file.
@@ -346,6 +350,47 @@ their entered quantities and rates implied.
   a change), the xlsx columns, and `0002_amount_overrides.sql`. In the workbook the
   derived cell becomes `IF(override="", <formula>, override)`, so editing the override in
   Excel recalculates exactly as it does in the app.
+
+## Rate provenance (the `ratesFrom` column)
+
+Rates have always been snapshots, so the stored numbers were already right. What a row
+could not say was **why** its rate differs from the chart today — a deliberate override,
+or a chart that has moved on since. Deciding that by comparing against the current chart
+does not merely blur the two; it **inverts** the moment a rate changes:
+
+```
+chart 650 -> 675 next month
+  row stored 650, untouched  ->  "differs"  (wrong: nobody touched it)
+  row stored 675, typed over ->  "matches"  (wrong: a human typed it)
+```
+
+And it flips every historical row at once. So the row records it directly.
+
+- `ratesFrom` on both row types is one **string** of `field:value` pairs —
+  `quaryRate:650;rentRate:250` — carrying what each typed-over cell held **before** the
+  edit. Absent means every rate matched the chart at entry time, true of most rows, so
+  they cost nothing. Encode/decode and the one rule live in `src/domain/rate-provenance.ts`.
+- **A string, not an array or JSON.** `rowsEqual` compares with `===`, which works on a
+  string for free; two identical arrays are never `===`, so an array would report a
+  spurious update on every merge. Keys are written in a fixed order so both devices
+  produce the same string, which the LWW tie-break depends on. It is also one legible
+  cell in the continuity workbook instead of seven columns of JSON.
+- **The delimiters are safe only for numeric values under code-controlled keys.** A
+  free-text baseline could contain `;` — that would need escaping, not another field.
+  `profitShares` is a list and does not fit `field:value` at all; if per-load split
+  changes ever need provenance, the baseline nests the workbook's `Owner:40|Adjust:20`
+  form. Awaiting a client answer on whether splits are ever changed per load.
+- **`computeRatesFrom` has one rule for every path** — new row, entry-form edit, inline
+  cell edit. A recorded baseline wins (it is the historical fact of what the cell was
+  typed over *from*, and must survive later edits and chart changes); otherwise the
+  autofilled value is the baseline; matching the baseline drops the entry, so typing an
+  override back to its original leaves the row honestly untouched. Same "agreement is not
+  an override" rule as the settled amounts.
+- **Nothing calculates from it**, so neither golden file can move.
+- **Provenance cannot be backfilled** — once the chart moves, what it used to say is
+  gone. The rows imported from the client's workbook carry no such signal and never can,
+  so they stay absent rather than guessing. That is also why capturing it was worth doing
+  before the reporting that will consume it: waiting would have left a permanent hole.
 
 ## Rates and the chart
 
@@ -423,7 +468,10 @@ Each of these was a real bug caught by the test suite, not a hypothetical.
   that `0`; saving before it snapshots a row with zero rates. **Pressing Enter** in that
   window does nothing at all: the save button is the form's default button and it is
   disabled until `initialised()`, and HTML blocks implicit submission when the default
-  button is disabled — so the keystroke is silently dropped. Four separate CI failures were
+  button is disabled — so the keystroke is silently dropped. The seed is not the only
+  thing that disables it: the app is zoneless, so `fill()` on the quantity returns before
+  the signal has re-enabled the button. **Wait on `entry-save` being enabled before
+  pressing Enter**, never on the fill alone. Four separate CI failures were
   all this one assumption. Likewise `saveEntry` / `saveEdit` / `waitForToast` wait on the
   app's own durability signals rather than on a timeout.
 - **To reproduce that window locally, use `delaySeedChunks()`** — CPU throttling does not
