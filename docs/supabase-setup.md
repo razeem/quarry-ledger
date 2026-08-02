@@ -85,6 +85,50 @@ so access stops immediately. Deleting the auth user as well is optional.
 Do step 1 for everyone *before* running the migrations, so the migration can link
 users into `members` by email.
 
+## Applying the schema
+
+`supabase/migrations/0001_init.sql` is the whole schema: tables, RLS policies,
+the `members` allow-list, the conditional-upsert functions and the `health` table
+the keepalive reads.
+
+**Invite everyone before running it.** The migration links every existing
+`auth.users` row into the team, which is safe precisely because self-signup is
+disabled — the table contains exactly the people who were invited.
+
+1. Dashboard → SQL Editor → New query.
+2. Paste the whole file, run it. It is idempotent (`create ... if not exists`,
+   `drop policy if exists`), so re-running after an edit is safe.
+3. Check Authentication → Users against `select * from public.members;` — the row
+   counts should match.
+
+**Adding someone later:** invite them in the dashboard, then
+
+```sql
+select public.add_member('someone@example.com');
+```
+
+**Removing someone:** `delete from public.members where email = '…';` RLS is
+evaluated per request, so access stops immediately. Deleting the auth user too is
+optional belt-and-braces.
+
+### What the schema does and does not do
+
+- **No derived values are stored.** No amounts, no totals. The server is a
+  synchronisation point, not a second calculation engine — the ledger row stays
+  the single source of truth.
+- **Deletes are tombstones** (`deleted boolean`), never row removal. There is no
+  `delete` grant at all. A dropped row would be resurrected by any device that
+  still had it.
+- **Conflicts resolve on the device clock** (`updated_at`), but the pull cursor
+  uses the server clock (`synced_at`, set by trigger). Skew can pick an
+  unexpected winner; it can never lose a record.
+- **`push_*` functions exist because PostgREST's upsert cannot say "only if
+  newer".** Without that, a device pushing stale rows would overwrite a newer
+  edit made elsewhere. They also derive `team_id` from the caller and ignore any
+  in the payload.
+- **Staged drafts are a `draft` column, not a second table**, so "Save to ledger"
+  propagates as an ordinary field update rather than a delete plus an insert.
+
 ## Keys
 
 - **anon / publishable** — ships in the built JS and is public by design. It
@@ -108,8 +152,11 @@ a failed deploy; an empty one is an explicit statement.
 
 - **Locally**: put both values in `.env` (gitignored). `npm start`, `npm run
   build` and `npm test` pick it up automatically.
-- **CI / production**: set both as **repository variables** (not secrets) so the
-  deploy workflow's build sees them.
+- **CI / production**: set both as **repository variables** (not secrets) —
+  Settings → Secrets and variables → Actions → Variables → New repository
+  variable, named `SUPABASE_URL` and `SUPABASE_ANON_KEY`. The deploy workflow's
+  build step and the keepalive workflow both read them from `vars.`. Leave them
+  unset and the deployed app simply runs with sync off.
 - **e2e**: `playwright.config.ts` forces `SYNC_OFF=1`, so the suite always builds
   with no backend and can never reach the real project, whatever is in `.env`.
 

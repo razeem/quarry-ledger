@@ -1,0 +1,59 @@
+name: Keep Supabase awake
+
+# Free-tier Supabase projects pause after about a week of inactivity, and a
+# paused project fails every sync until someone un-pauses it by hand. A weekly
+# read of the `health` table counts as activity.
+#
+# Treat this as insurance, not a guarantee. Supabase has never formally blessed
+# pinging as a way to stay awake, and GitHub disables scheduled workflows in a
+# repository with no commits for 60 days — the quiet period this defends
+# against is exactly when both could lapse. What actually protects the users is
+# that a paused backend degrades to sync-off: entry, reports and export keep
+# working, and the queue drains when the project comes back.
+#
+# It runs in its own workflow rather than on the deploy schedule so a failed
+# ping never blocks a release.
+
+on:
+  schedule:
+    # Mondays 06:00 UTC — comfortably inside the ~7-day window even if GitHub
+    # delays a run, which scheduled workflows are explicitly allowed to do.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read the health row
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "No backend configured — nothing to keep awake."
+            exit 0
+          fi
+
+          # `health` is the one table readable with just the anon key. Every
+          # other table is closed to `anon`, so a request to one of those would
+          # be rejected before doing real database work — and a rejected
+          # request is a weak claim to "activity".
+          status=$(curl --silent --show-error --max-time 30 \
+            --output /tmp/health.json --write-out '%{http_code}' \
+            --header "apikey: $SUPABASE_ANON_KEY" \
+            --header "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/health?select=checked_at&limit=1")
+
+          echo "HTTP $status"
+          cat /tmp/health.json || true
+
+          # Fail loudly. A silently broken keepalive is worse than none: the
+          # project would pause and nobody would find out until sync stopped.
+          if [ "$status" != "200" ]; then
+            echo "::error::Keepalive ping failed — the project may pause. Check RLS on public.health and the repository variables."
+            exit 1
+          fi

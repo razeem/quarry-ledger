@@ -44,6 +44,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build (base href derived from the repo name)
+        # Repository VARIABLES, not secrets: the anon key ships in the built JS
+        # and grants nothing on its own — all authority comes from the signed-in
+        # user's JWT hitting row-level security. Unset is a valid state: the
+        # prebuild then writes an empty config and the app runs with sync off.
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: npm run build -- --base-href "/${{ github.event.repository.name }}/"
       - name: SPA deep-link fallback
         run: cp dist/index.html dist/404.html
