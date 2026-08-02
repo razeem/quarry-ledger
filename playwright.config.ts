@@ -25,7 +25,11 @@ export default defineConfig({
   // Run against the production build served statically (not `ng serve`) so lazy
   // chunks are real static files — deterministic, no dev-server reloads.
   webServer: {
-    command: `npm run build && PORT=${PORT} node e2e/static-server.mjs`,
+    // SYNC_OFF pins the build to "no backend configured". These tests assert the
+    // app's offline-first behaviour and must never reach a real Supabase project,
+    // whatever is in the developer's `.env`. The fake backend supplies its own
+    // config by intercepting requests.
+    command: `SYNC_OFF=1 npm run build && PORT=${PORT} node e2e/static-server.mjs`,
     url: BASE_URL,
     // Never reuse: a stale or half-dead server on this port silently serves an old
     // `dist/`, which fails every test at once for no visible reason. Starting fresh

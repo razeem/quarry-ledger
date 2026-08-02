@@ -7,7 +7,14 @@
       "installMode": "prefetch",
       "updateMode": "prefetch",
       "resources": {
-        "files": ["/favicon.ico", "/index.html", "/manifest.webmanifest", "/*.css", "/*.js"]
+        "files": [
+          "/favicon.ico",
+          "/index.html",
+          "/manifest.webmanifest",
+          "/sync-config.json",
+          "/*.css",
+          "/*.js"
+        ]
       }
     },
     {
@@ -15,14 +22,23 @@
       "installMode": "lazy",
       "updateMode": "prefetch",
       "resources": {
-        "files": ["/media/**", "/*.svg", "/*.png", "/*.webp", "/*.woff2"]
+        "files": [
+          "/media/**",
+          "/*.svg",
+          "/*.png",
+          "/*.webp",
+          "/*.woff2"
+        ]
       }
     }
   ],
   "dataGroups": [
     {
       "name": "google-fonts",
-      "urls": ["https://fonts.googleapis.com/**", "https://fonts.gstatic.com/**"],
+      "urls": [
+        "https://fonts.googleapis.com/**",
+        "https://fonts.gstatic.com/**"
+      ],
       "cacheConfig": {
         "strategy": "freshness",
         "maxSize": 40,

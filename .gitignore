@@ -56,3 +56,14 @@ Thumbs.db
 # and contents carry real names (see CLAUDE.md's privacy rules). Seed data is
 # extracted from them into data/*.json with all labels relabelled.
 *.xlsx
+
+# Generated at build time from SUPABASE_URL / SUPABASE_ANON_KEY (see
+# scripts/write-sync-config.mjs). Not committed, because the deployed value
+# differs per environment and is written unconditionally — empty when unset,
+# which is what makes a build with no backend degrade to sync-off.
+/public/sync-config.json
+
+# Local backend configuration (SUPABASE_URL / SUPABASE_ANON_KEY). The anon key
+# is not a secret, but the file is per-machine — CI and production supply the
+# same values as repository variables instead.
+/.env

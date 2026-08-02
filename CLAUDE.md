@@ -76,6 +76,8 @@ src/app/core/ledger/   LedgerStore + PartyLedgerStore (the persistence facades) 
                        coercion trims EDGE whitespace only — internal quirks survive).
 src/app/core/accounts/ AccountsStore — the book registry + per-account key scheme.
 src/app/core/          storage (IndexedDB), preferences, cross-device transfer (code/QR).
+src/app/core/sync/     the Supabase seam. `sync-config.ts` decides at runtime whether
+                       there is a backend at all; everything here is optional.
 src/app/shared/ui/     presentational primitives (page-header, section-card, stat-tile,
                        paginator) + filterOptions for the type-ahead pickers.
 src/app/shared/ledger/ pageOf() paging helper + deleteRowWithUndo (id-preserving undo).
@@ -281,6 +283,26 @@ design. A monthly export kept off the devices is the restore point.
   profit figure in the workbook sums from there.
 - Tombstoned rows are excluded — a deleted load is not part of the accounts. The JSON
   backup still carries them, because that is the path deletes travel on.
+
+## Sync configuration
+
+`docs/supabase-setup.md` is the runbook for the backend itself (project, auth, SMTP,
+membership, keys). What matters in the code:
+
+- **Sync is optional by construction.** `public/sync-config.json` is generated at build
+  time by `scripts/write-sync-config.mjs` and is **always written — empty when
+  `SUPABASE_URL` / `SUPABASE_ANON_KEY` are unset**. Empty means sync is off and the app is
+  exactly the app that shipped before sync existed. A *missing* file would be
+  indistinguishable from a failed deploy; an empty one says so explicitly.
+- **Nothing in `sync-config.ts` may throw.** Absent, malformed, offline, half-configured
+  (url without key) all resolve to `null` — no backend — rather than a client that fails
+  at its first request.
+- The anon key is **public by design**: it ships in the built JS and grants nothing on its
+  own, since all authority comes from the signed-in user's JWT hitting RLS. It is a build
+  *variable*, never a secret. The `service_role` key is a real secret and is used nowhere.
+- Locally the values live in a gitignored `.env`. **`playwright.config.ts` forces
+  `SYNC_OFF=1`**, so the e2e suite always builds with no backend and can never reach the
+  real project whatever a developer has configured.
 
 ## Rates and the chart
 
