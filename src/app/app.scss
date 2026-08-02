@@ -181,6 +181,49 @@
 }
 
 /* ---------- Account (book) switcher ---------- */
+// A switcher menu row: the mat-menu-item does the switching, the pencil renames.
+.account-menu-row {
+  display: flex;
+  align-items: center;
+
+  [mat-menu-item] {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  &__rename {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin-inline-end: 8px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-soft);
+    cursor: pointer;
+    transition:
+      background var(--transition),
+      color var(--transition);
+
+    &:hover {
+      background: var(--chip-bg);
+      color: var(--text);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--accent-1);
+      outline-offset: -2px;
+    }
+
+    mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+  }
+}
+
 .account-switch {
   flex: 0 0 auto;
   margin: 0.75rem 0.6rem 0;

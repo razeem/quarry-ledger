@@ -61,9 +61,16 @@ export const PARTY_PILLARS: Pillar[] = [
     status: 'active',
   },
   {
+    path: 'party/ledger',
+    title: 'Ledger',
+    icon: 'receipt_long',
+    description: 'Every load across every party — filter, page, edit.',
+    status: 'active',
+  },
+  {
     path: 'party/statements',
     title: 'Statements',
-    icon: 'receipt_long',
+    icon: 'account_balance',
     description: 'Per-party payable, receivable, rent and profit.',
     status: 'active',
   },
@@ -111,6 +118,11 @@ export const routes: Routes = [
     path: 'party/entry',
     title: 'Party Entry · Quarry Ledger',
     loadComponent: () => import('./features/party/party-entry').then((m) => m.PartyEntry),
+  },
+  {
+    path: 'party/ledger',
+    title: 'Party Ledger · Quarry Ledger',
+    loadComponent: () => import('./features/party/party-ledger').then((m) => m.PartyLedger),
   },
   {
     path: 'party/statements',

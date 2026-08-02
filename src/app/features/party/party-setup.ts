@@ -195,6 +195,7 @@ export class PartySetup {
           rows: snapshot.rows ?? [],
           rates: snapshot.rates ?? [],
           vehicles: snapshot.vehicles ?? [],
+          drafts: snapshot.drafts ?? [],
         });
         this.snackBar.open(`Restored ${snapshot.rows?.length ?? 0} rows`, 'OK', {
           duration: 6000,

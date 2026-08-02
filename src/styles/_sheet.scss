@@ -114,6 +114,40 @@
   font-weight: 600;
 }
 
+// A two-way toggle living inside a cell (the party sheet's With/Without rent).
+.sheet__toggle {
+  display: flex;
+  height: 46px;
+  padding: 6px;
+  gap: 4px;
+
+  button {
+    flex: 1 1 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-soft);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+      background var(--transition),
+      color var(--transition);
+
+    &:focus-visible {
+      outline: 2px solid var(--accent-1);
+      outline-offset: -2px;
+    }
+  }
+
+  &--on {
+    background: var(--mat-sys-primary-container) !important;
+    color: var(--text) !important;
+    border-color: transparent !important;
+  }
+}
+
 // ---- Cell badge ('auto' / 'edited' / 'saved') ----
 .sheet__autocell {
   position: relative;
@@ -155,6 +189,47 @@
 }
 .sheet__saved:hover > td {
   background: var(--chip-bg);
+  color: var(--text);
+}
+
+// ---- Staged drafts: on the sheet but not yet in the base ledger ----
+.sheet__saved--draft > td {
+  background: color-mix(in srgb, var(--accent-1) 4%, transparent);
+}
+
+.sheet__draft-chip {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--r-pill);
+  border: 1px dashed color-mix(in srgb, var(--accent-1) 55%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent-1);
+  vertical-align: middle;
+}
+
+// A cell a draft still needs before it can sync (e.g. no crusher yet).
+.sheet__missing {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--mat-sys-error);
+  white-space: nowrap;
+}
+
+// The trailing per-row actions cell (draft chip / edit / delete).
+.sheet__rowactions {
+  white-space: nowrap;
+  text-align: center;
+}
+
+// A draft-row cell holding a live input: the input brings its own padding,
+// and edits render in the full-strength text colour.
+.sheet__saved > td.sheet__editcell {
+  padding: 0;
   color: var(--text);
 }
 

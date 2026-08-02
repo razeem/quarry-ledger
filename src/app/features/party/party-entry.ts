@@ -14,10 +14,16 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PageHeader } from '../../shared/ui/page-header';
-import { SectionCard } from '../../shared/ui/section-card';
-import { PartyLedgerStore, type PartyLedgerRowDraft } from '../../core/ledger/party-ledger-store';
+import { filterOptions } from '../../shared/ui/option-filter';
+import { deleteRowWithUndo } from '../../shared/ledger/undo-delete';
+import {
+  isPartyDraftComplete,
+  PartyLedgerStore,
+  type PartyLedgerRowDraft,
+} from '../../core/ledger/party-ledger-store';
 import { computePartyRow, type ComputedPartyRow } from '../../../domain/party/calc';
 import { partyRatePrefill } from '../../../domain/party/rates';
 import { vehicleOwner } from '../../../domain/rates';
@@ -26,6 +32,61 @@ import type { PartyLedgerRow, PartyProfitShare } from '../../../domain/party/typ
 
 type RateField = 'quaryRate' | 'billRate' | 'rentRate';
 type RateOrigin = 'auto' | 'saved' | 'edited' | 'none';
+
+/** Which visual group a column belongs to (same vocabulary as the daily sheet). */
+type ColumnGroup = 'input' | 'auto' | 'calc';
+
+interface SheetColumn {
+  key: string;
+  label: string;
+  width: number;
+  group: ColumnGroup;
+  /** Absorbs surplus width — free-text columns only (see the daily sheet). */
+  flex?: boolean;
+}
+
+/**
+ * Column order mirrors the source workbook's party sheets: the load facts, the
+ * three snapshotted rates, then the computed money.
+ */
+const COLUMNS: readonly SheetColumn[] = [
+  { key: 'date', label: 'Date', width: 126, group: 'input' },
+  { key: 'party', label: 'Party', width: 168, group: 'input', flex: true },
+  { key: 'qty', label: 'Qty (t)', width: 82, group: 'input' },
+  { key: 'rent', label: 'Rent', width: 108, group: 'input' },
+  { key: 'vehicle', label: 'Vehicle', width: 138, group: 'input', flex: true },
+  { key: 'owner', label: 'Owner', width: 130, group: 'input', flex: true },
+  { key: 'quaryRate', label: 'Quary', width: 86, group: 'auto' },
+  { key: 'billRate', label: 'Bill', width: 86, group: 'auto' },
+  { key: 'rentRate', label: 'Rent ₹/t', width: 86, group: 'auto' },
+  { key: 'quarryAmount', label: 'Quarry Amt', width: 100, group: 'calc' },
+  { key: 'billAmount', label: 'Bill Amt', width: 100, group: 'calc' },
+  { key: 'rentAmount', label: 'Veh Rent', width: 94, group: 'calc' },
+  { key: 'profitAmount', label: 'Profit', width: 94, group: 'calc' },
+  { key: 'actions', label: '', width: 100, group: 'input' },
+];
+
+const RATE_COLUMNS: readonly { field: RateField; label: string; testid: string }[] = [
+  { field: 'quaryRate', label: 'Quary rate', testid: 'party-entry-quary-rate' },
+  { field: 'billRate', label: 'Bill rate', testid: 'party-entry-bill-rate' },
+  { field: 'rentRate', label: 'Rent rate', testid: 'party-entry-rent-rate' },
+];
+
+/** How many of the date's saved rows to show above the entry row. */
+const VISIBLE_DAY_ROWS = 20;
+
+/** A saved row prepared for display above the entry row (daily-sheet twin). */
+interface SavedRowView {
+  row: PartyLedgerRow;
+  calc: ComputedPartyRow;
+  differs: Record<RateField, boolean>;
+  /** False when the setup has no entry for this party, so nothing to compare. */
+  comparable: boolean;
+  /** 'draft' rows are staged on this sheet only; 'row' is in the book's ledger. */
+  kind: 'row' | 'draft';
+  /** A draft still missing what it needs to sync (party / qty). */
+  incomplete: boolean;
+}
 
 /** Today as ISO 'YYYY-MM-DD' in local time (never a UTC-shifted day). */
 function todayIso(): string {
@@ -38,16 +99,18 @@ function todayIso(): string {
 }
 
 /**
- * Party-ledger load entry — the same fast-entry contract as the daily sheet:
- * pick the party, the rates and profit split autofill from the party's config
- * (and stay editable), the owner autofills from the vehicle master, and the
- * computed money is previewed live. Whatever is visible at save time is what
- * gets snapshotted onto the row; editing the config later never touches it.
+ * Party-ledger load entry as a spreadsheet — the same sheet contract as the
+ * daily Entry tab: saved rows stack above a sticky entry row, the tinted rate
+ * cells autofill from the party setup (and stay editable), the computed money
+ * is previewed live, and new rows stage as durable DRAFTS until "Save to
+ * ledger" moves the complete ones across. Whatever is visible at save time is
+ * what gets snapshotted onto the row; editing the setup later never touches it.
  */
 @Component({
   selector: 'app-party-entry',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, MatIconModule, MatButtonModule, PageHeader, SectionCard],
+  // Sheet styles are global (`src/styles/_sheet.scss`), shared with the daily sheet.
+  imports: [FormsModule, MatIconModule, MatButtonModule, MatAutocompleteModule, PageHeader],
   templateUrl: './party-entry.html',
 })
 export class PartyEntry {
@@ -55,11 +118,22 @@ export class PartyEntry {
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
 
-  private readonly qtyField = viewChild<ElementRef<HTMLInputElement>>('qtyField');
+  protected readonly COLUMNS = COLUMNS;
+  protected readonly RATE_COLUMNS = RATE_COLUMNS;
+  /** Tooltip on a highlighted saved-row rate cell. */
+  protected readonly DIFFERS_HINT =
+    'This rate does not match the current party setup — it was either typed over on entry or the setup changed afterwards. The row keeps its own snapshot.';
 
-  /** `?edit=<row id>` — statements link here to edit a row. */
+  private readonly qtyCell = viewChild<ElementRef<HTMLInputElement>>('qtyCell');
+  private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
+
+  /** `?edit=<row id>` — statements and the party ledger link here to edit. */
   readonly edit = input<string | undefined>(undefined);
   readonly editingId = signal<string | null>(null);
+  /** Provenance of the row being edited: a staged draft or a ledger row. */
+  readonly editingKind = signal<'row' | 'draft' | null>(null);
+  /** A `query` edit returns to where it started; an `inline` edit stays here. */
+  private editSource: 'query' | 'inline' = 'inline';
 
   protected readonly date = signal(todayIso());
   protected readonly party = signal('');
@@ -94,6 +168,20 @@ export class PartyEntry {
   protected readonly vehicles = this.store.vehicleOptions;
   protected readonly isEditing = computed(() => this.editingId() !== null);
 
+  // Type-ahead panels — a chosen value reopens with the FULL list (shared
+  // filterOptions), unlike the datalist behaviour it replaces.
+  protected readonly partyPanel = computed(() => filterOptions(this.parties(), this.party()));
+  protected readonly vehiclePanel = computed(() => filterOptions(this.vehicles(), this.vehicle()));
+
+  /** Per-draft panel options (called from the template with the row's value). */
+  protected filterParties(value: string): string[] {
+    return filterOptions(this.parties(), value);
+  }
+
+  protected filterVehicles(value: string): string[] {
+    return filterOptions(this.vehicles(), value);
+  }
+
   private readonly hasPrefill = computed(
     () => partyRatePrefill(this.store.rates(), this.party(), this.withRent()) !== undefined,
   );
@@ -104,18 +192,79 @@ export class PartyEntry {
     this.profitShares().reduce((sum, share) => sum + share.perTon, 0),
   );
 
+  /**
+   * A new row only needs a quantity — the quarry's raw data arrives without a
+   * party, and such rows stage as drafts. Editing a LEDGER row still requires
+   * its party: the book never holds a row that belongs to nobody.
+   */
   protected readonly canSave = computed(
-    () => this.party().trim() !== '' && (this.qty() ?? 0) > 0,
+    () =>
+      (this.qty() ?? 0) > 0 &&
+      (this.editingKind() !== 'row' || this.party().trim() !== ''),
   );
 
-  /** The selected date's saved rows, newest last (entry order). */
-  protected readonly dayRows = computed(() =>
-    this.store.rows().filter((row) => row.date === this.date()),
+  /**
+   * The date's rows, oldest first: ledger rows first, then the staged drafts
+   * (closest to the entry row, since they are the ones still in progress).
+   */
+  private readonly allDayItems = computed<{ row: PartyLedgerRow; kind: 'row' | 'draft' }[]>(
+    () => {
+      const date = this.date();
+      return [
+        ...this.store
+          .rows()
+          .filter((row) => row.date === date)
+          .map((row) => ({ row, kind: 'row' as const })),
+        ...this.store
+          .drafts()
+          .filter((row) => row.date === date)
+          .map((row) => ({ row, kind: 'draft' as const })),
+      ];
+    },
   );
-  protected readonly dayQty = computed(() =>
-    this.dayRows().reduce((sum, row) => sum + row.qty, 0),
+  private readonly dayItems = computed(() => this.allDayItems().slice(-VISIBLE_DAY_ROWS));
+
+  /** The visible saved rows with derived values + setup-difference flags. */
+  protected readonly dayRowViews = computed<SavedRowView[]>(() => {
+    const rates = this.store.rates();
+    return this.dayItems().map(({ row, kind }) => {
+      const prefill = partyRatePrefill(rates, row.party, row.withRent);
+      return {
+        row,
+        kind,
+        incomplete: kind === 'draft' && !isPartyDraftComplete(row),
+        calc: computePartyRow(row),
+        comparable: prefill !== undefined,
+        differs: {
+          quaryRate: prefill !== undefined && row.quaryRate !== prefill.quaryRate,
+          billRate: prefill !== undefined && row.billRate !== prefill.billRate,
+          rentRate: prefill !== undefined && row.rentRate !== prefill.rentRate,
+        },
+      };
+    });
+  });
+
+  /** How many visible saved rows carry at least one rate off the setup. */
+  protected readonly rowsDifferingFromSetup = computed(
+    () => this.dayRowViews().filter((v) => Object.values(v.differs).some(Boolean)).length,
   );
+  protected readonly hiddenDayRows = computed(
+    () => this.allDayItems().length - this.dayItems().length,
+  );
+  protected readonly dayTotals = computed(() => {
+    const rows = this.allDayItems().map((item) => item.row);
+    return { loads: rows.length, qty: rows.reduce((sum, row) => sum + row.qty, 0) };
+  });
   protected readonly dayLabel = computed(() => formatDate(this.date()));
+
+  // --- Draft sync ------------------------------------------------------------
+
+  protected readonly draftCount = computed(() => this.store.drafts().length);
+  protected readonly syncableCount = computed(
+    () => this.store.drafts().filter(isPartyDraftComplete).length,
+  );
+  protected readonly heldCount = computed(() => this.draftCount() - this.syncableCount());
+  protected readonly syncing = signal(false);
 
   constructor() {
     // Autofill rates + split on party / rent-mode change. A config miss leaves
@@ -138,12 +287,24 @@ export class PartyEntry {
       if (owner) this.owner.set(owner);
     });
 
-    // Load the row named by `?edit=<id>` once the store has hydrated.
+    // Load the row named by `?edit=<id>` once the store has hydrated. Ledger
+    // rows and staged drafts are both addressable.
     effect(() => {
       const id = this.edit();
       if (!id || !this.store.ready() || this.editingId() === id) return;
       const row = this.store.rowById(id);
-      if (row) this.loadRow(row);
+      if (row) {
+        this.editSource = 'query';
+        this.editingKind.set('row');
+        this.loadRow(row);
+        return;
+      }
+      const draft = this.store.draftById(id);
+      if (draft) {
+        this.editSource = 'query';
+        this.editingKind.set('draft');
+        this.loadRow(draft);
+      }
     });
   }
 
@@ -171,13 +332,13 @@ export class PartyEntry {
 
   protected onPartyChange(value: string): void {
     this.suppressPrefill = false;
-    this.overridden.set(new Set());
+    // Edited cells always beat autofill (client rule): a rate the user typed
+    // stays put across party/mode changes; untouched cells re-populate.
     this.party.set(value);
   }
 
   protected onWithRentChange(value: boolean): void {
     this.suppressPrefill = false;
-    this.overridden.set(new Set());
     this.withRent.set(value);
   }
 
@@ -207,6 +368,16 @@ export class PartyEntry {
     return this.hasPrefill() ? 'auto' : 'none';
   }
 
+  protected isAuto(field: RateField): boolean {
+    const origin = this.rateOrigin(field);
+    return origin === 'auto' || origin === 'saved';
+  }
+
+  /** Keep the focused cell on screen while tabbing across the wide sheet. */
+  protected revealCell(event: FocusEvent): void {
+    (event.target as HTMLElement | null)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
+
   // --- Row actions -----------------------------------------------------------
 
   /** Persist, then confirm — nothing is reported until the write has landed. */
@@ -214,13 +385,17 @@ export class PartyEntry {
     if (!this.canSave() || this.saving() || !this.initialised()) return;
     const draft = this.draftFields();
     const editingId = this.editingId();
+    const editingKind = this.editingKind();
 
     this.saving.set(true);
     try {
-      if (editingId) {
+      if (editingId && editingKind === 'row') {
         await this.store.updateRow(editingId, draft);
+      } else if (editingId) {
+        await this.store.updateDraft(editingId, draft);
       } else {
-        await this.store.addRow(draft);
+        // New rows always stage as drafts; "Save N to ledger" moves them across.
+        await this.store.addDraft(draft);
       }
     } catch (err) {
       this.snackBar.open(
@@ -233,35 +408,137 @@ export class PartyEntry {
       this.saving.set(false);
     }
 
-    if (editingId) {
+    if (editingId && this.editSource === 'query') {
       this.snackBar.open('Row updated', 'OK', { duration: 3000 });
       void this.router.navigate(['/party/statements']);
       return;
     }
+    if (editingId) {
+      this.snackBar.open('Row updated', 'OK', { duration: 3000 });
+    }
     this.startNextRow();
+  }
+
+  /** Move every complete draft into the book's ledger; incomplete ones stay. */
+  protected async syncDraftsToLedger(): Promise<void> {
+    if (this.syncing() || !this.initialised() || this.syncableCount() === 0) return;
+    this.syncing.set(true);
+    try {
+      const { synced, held } = await this.store.syncDrafts();
+      const heldNote = held > 0 ? ` · ${held} held — missing party` : '';
+      this.snackBar.open(
+        `${synced} row${synced === 1 ? '' : 's'} saved to ledger${heldNote}`,
+        'OK',
+        { duration: 5000 },
+      );
+    } finally {
+      this.syncing.set(false);
+    }
   }
 
   /** Carry everything over except the quantity — same-party loads are frequent. */
   private startNextRow(): void {
     this.editingId.set(null);
+    this.editingKind.set(null);
+    this.editSource = 'inline';
     this.qty.set(null);
-    this.qtyField()?.nativeElement.focus();
+    this.scroller()?.nativeElement.scrollTo({ left: 0 });
+    this.qtyCell()?.nativeElement.focus();
   }
 
   protected cancelEdit(): void {
+    const fromQuery = this.editSource === 'query';
     this.editingId.set(null);
+    this.editingKind.set(null);
+    this.editSource = 'inline';
     this.qty.set(null);
-    void this.router.navigate(['/party/statements']);
+    // An inline edit stays on the sheet; a Statements edit goes back there.
+    if (fromQuery) void this.router.navigate(['/party/statements']);
   }
 
-  protected async deleteRow(row: PartyLedgerRow): Promise<void> {
-    if (!confirm(`Delete this ${formatTons(row.qty)} load for ${row.party}?`)) return;
-    await this.store.deleteRow(row.id);
-    this.snackBar.open('Row deleted', 'OK', { duration: 3000 });
+  // --- Inline draft editing ---------------------------------------------------
+  // Draft rows are live spreadsheet cells (see the daily sheet for rationale).
+
+  protected patchDraft(row: PartyLedgerRow, patch: Partial<PartyLedgerRowDraft>): void {
+    void this.store.updateDraft(row.id, patch);
   }
 
-  protected editRow(row: PartyLedgerRow): void {
-    this.loadRow(row);
+  protected patchDraftQty(row: PartyLedgerRow, value: number | string): void {
+    const qty = Number(value);
+    this.patchDraft(row, { qty: Number.isFinite(qty) ? qty : 0 });
+  }
+
+  protected patchDraftRate(row: PartyLedgerRow, field: RateField, value: number | string): void {
+    const parsed = Number(value);
+    this.patchDraft(row, { [field]: Number.isFinite(parsed) ? parsed : 0 });
+  }
+
+  /** A party typed into a draft re-resolves the setup, keeping edited cells. */
+  protected patchDraftParty(row: PartyLedgerRow, party: string): void {
+    this.patchDraft(row, { party, ...this.draftRatePatch(row, party, row.withRent) });
+  }
+
+  protected patchDraftRentMode(row: PartyLedgerRow, withRent: boolean): void {
+    const patch = this.draftRatePatch(row, row.party, withRent);
+    // Rent never applies without rent — the engine contract expects 0.
+    this.patchDraft(row, { withRent, ...patch, ...(withRent ? {} : { rentRate: 0 }) });
+  }
+
+  /** Vehicle edits re-run the owner autofill, like the entry row does. */
+  protected patchDraftVehicle(row: PartyLedgerRow, vehicle: string): void {
+    const owner = vehicleOwner(this.store.vehicles(), vehicle);
+    this.patchDraft(row, { vehicle, ...(owner ? { owner } : {}) });
+  }
+
+  /**
+   * The setup rates a party/mode change should apply to a draft — skipping any
+   * cell that differs from its previous auto-filled value (i.e. was typed).
+   * The profit split is not editable inline, so it always tracks the setup.
+   */
+  private draftRatePatch(
+    row: PartyLedgerRow,
+    party: string,
+    withRent: boolean,
+  ): Partial<PartyLedgerRowDraft> {
+    const rates = this.store.rates();
+    const next = partyRatePrefill(rates, party, withRent);
+    if (!next) return {};
+    const prev = partyRatePrefill(rates, row.party, row.withRent);
+    const patch: Partial<PartyLedgerRowDraft> = { profitShares: next.profitShares };
+    for (const field of ['quaryRate', 'billRate', 'rentRate'] as const) {
+      const baseline = prev ? prev[field] : 0;
+      if (row[field] === baseline) patch[field] = next[field];
+    }
+    return patch;
+  }
+
+  /** Start editing a saved row (ledger or draft) in place, on this sheet. */
+  protected editRow(view: SavedRowView): void {
+    this.editSource = 'inline';
+    this.editingKind.set(view.kind);
+    // Drop any ?edit= param, or its effect would reload that row over this one.
+    if (this.edit()) void this.router.navigate(['/party/entry'], { replaceUrl: true });
+    this.loadRow(view.row);
+  }
+
+  /** Delete a saved row (ledger or draft), always with an id-preserving Undo. */
+  protected async deleteRow(view: SavedRowView): Promise<void> {
+    const { row, kind } = view;
+    if (this.editingId() === row.id) {
+      this.editingId.set(null);
+      this.editingKind.set(null);
+      this.editSource = 'inline';
+    }
+    await deleteRowWithUndo(this.snackBar, {
+      message: kind === 'draft' ? 'Draft deleted' : 'Row deleted',
+      doDelete: () =>
+        kind === 'draft' ? this.store.deleteDraft(row.id) : this.store.deleteRow(row.id),
+      restore: () => {
+        if (kind === 'draft') return this.store.restoreDraft(row);
+        this.store.mergeImport({ rows: [row] });
+        return this.store.flush();
+      },
+    });
   }
 
   private loadRow(row: PartyLedgerRow): void {
@@ -283,10 +560,6 @@ export class PartyEntry {
   }
 
   // --- Formatting --------------------------------------------------------------
-
-  protected calc(row: PartyLedgerRow): ComputedPartyRow {
-    return computePartyRow(row);
-  }
 
   protected inr(value: number): string {
     return formatInr(value);

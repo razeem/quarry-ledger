@@ -5,9 +5,11 @@ import {
   openPartyBook,
   PARTY_GOLDEN_PAYABLE,
   PARTY_GOLDEN_RECEIVABLE,
+  PARTY_GOLDEN_RENT,
   PARTY_SEED_ROWS,
   savePartyEntry,
   setParty,
+  syncPartyDrafts,
   waitForToast,
 } from './helpers';
 
@@ -21,7 +23,8 @@ test('switches to the party book and back, and the choice survives a reload', as
   await page.goto('/entry');
   await openPartyBook(page);
 
-  // The sidebar now shows the party tab set.
+  // The sidebar now shows the party tab set — five tabs, Ledger included.
+  await expect(page.getByTestId('nav-party/ledger')).toBeVisible();
   await expect(page.getByTestId('nav-party/statements')).toBeVisible();
   await expect(page.getByTestId('nav-entry')).toHaveCount(0);
 
@@ -67,8 +70,13 @@ test('autofills rates + owner, saves a load, and the statement picks it up', asy
   await page.getByTestId('party-entry-qty').fill('10');
   await savePartyEntry(page);
 
-  // 10 t × ₹580 = ₹5,800 quarry payable on today's saved-rows table.
-  await expect(page.getByTestId('party-day-table')).toContainText('₹5,800');
+  // 10 t × ₹580 = ₹5,800 quarry payable on the staged row above the entry row.
+  const stagedRow = page.locator('.sheet__saved').last();
+  await expect(stagedRow).toContainText('₹5,800');
+  await expect(stagedRow).toContainText('draft');
+
+  // Statements only see synced rows, so sync the draft across first.
+  await syncPartyDrafts(page);
 
   // The statement now includes the new load: 290.51 + 10 = 300.51 t.
   await page.getByTestId('nav-party/statements').click();
@@ -89,9 +97,9 @@ test('a without-rent load snapshots the without-rent rates and no rent', async (
   await page.getByTestId('party-entry-qty').fill('2');
   await savePartyEntry(page);
   // Saved with the without-rent snapshot: billed 2 × ₹650, no vehicle rent.
-  const dayTable = page.getByTestId('party-day-table');
-  await expect(dayTable).toContainText('W/O');
-  await expect(dayTable).toContainText('₹1,300');
+  const stagedRow = page.locator('.sheet__saved').last();
+  await expect(stagedRow).toContainText('W/O');
+  await expect(stagedRow).toContainText('₹1,300');
 });
 
 test('editing the setup never mutates an existing row (rates are snapshots)', async ({
@@ -138,7 +146,7 @@ test('exports a consolidated xlsx and imports it into another book', async ({ pa
   await page.getByTestId('account-switcher').click();
   await page.getByTestId('account-new').click();
   await page.getByTestId('new-account-name').fill('Import Target');
-  await page.getByTestId('new-account-create').click();
+  await page.getByTestId('new-account-submit').click();
   await expect(page).toHaveURL(/\/party\/entry$/);
 
   await page.getByTestId('nav-party/setup').click();
@@ -158,16 +166,113 @@ test('exports a consolidated xlsx and imports it into another book', async ({ pa
   await waitForToast(page, /0 added · 0 updated · 35 unchanged/);
 });
 
+test('the party Ledger tab filters, paginates and round-trips an edit', async ({ page }) => {
+  await page.goto('/entry');
+  await openPartyBook(page);
+
+  await page.getByTestId('nav-party/ledger').click();
+  await page.getByTestId('party-ledger-show-all').click();
+  await expect(page.getByTestId('party-ledger-summary')).toContainText(
+    `${PARTY_SEED_ROWS} loads`,
+  );
+  // 35 rows at 25/page = 2 pages, and page 2 holds the remainder.
+  await expect(page.getByTestId('pager-label')).toHaveText(/1 \/ 2/);
+  await expect(page.getByTestId('party-ledger-table').locator('tbody tr')).toHaveCount(25);
+  await page.getByTestId('pager-next').click();
+  await expect(page.getByTestId('party-ledger-table').locator('tbody tr')).toHaveCount(10);
+
+  // Filtering by party narrows to that party's loads only.
+  await page.getByTestId('party-ledger-filter-party').selectOption('Lakeside Crushers');
+  const partyCells = await page
+    .getByTestId('party-ledger-table')
+    .locator('tbody tr td:nth-child(2)')
+    .allTextContents();
+  expect(partyCells.length).toBeGreaterThan(0);
+  expect(partyCells.every((c) => c.trim() === 'Lakeside Crushers')).toBe(true);
+
+  // Edit round-trips through the entry sheet's ?edit= flow.
+  await page.locator('[data-testid^="party-ledger-row-edit-"]').first().click();
+  await expect(page).toHaveURL(/\/party\/entry\?edit=/);
+  await expect(page.getByTestId('party-entry-party')).toHaveValue('Lakeside Crushers');
+});
+
+test('deleting from the party Ledger can be undone, keeping the row count', async ({ page }) => {
+  await page.goto('/entry');
+  await openPartyBook(page);
+  await page.getByTestId('nav-party/ledger').click();
+  await page.getByTestId('party-ledger-show-all').click();
+  await expect(page.getByTestId('party-ledger-summary')).toContainText(
+    `${PARTY_SEED_ROWS} loads`,
+  );
+
+  await page.locator('[data-testid^="party-ledger-row-delete-"]').first().click();
+  await waitForToast(page, 'Row deleted');
+  await expect(page.getByTestId('party-ledger-summary')).toContainText(
+    `${PARTY_SEED_ROWS - 1} loads`,
+  );
+
+  // Undo restores the original id, so the seed count is exact after a reload.
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('party-ledger-summary')).toContainText(
+    `${PARTY_SEED_ROWS} loads`,
+  );
+  await page.reload();
+  await page.getByTestId('party-ledger-show-all').click();
+  await expect(page.getByTestId('party-ledger-summary')).toContainText(
+    `${PARTY_SEED_ROWS} loads`,
+  );
+});
+
+test('prints the party reports with the golden totals', async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as unknown as { __printCalls: number }).__printCalls = 0;
+    window.print = () => {
+      (window as unknown as { __printCalls: number }).__printCalls += 1;
+    };
+  });
+  const printCalls = () =>
+    page.evaluate(() => (window as unknown as { __printCalls: number }).__printCalls);
+
+  await page.goto('/entry');
+  await openPartyBook(page);
+  await page.getByTestId('nav-party/reports').click();
+
+  await page.getByTestId('party-reports-print').click();
+  // Both sections come pre-ticked; print as offered.
+  await page.getByTestId('print-confirm').click();
+  await expect.poll(printCalls, { timeout: 15_000 }).toBe(1);
+
+  const printed = (await page.getByTestId('party-report-print').textContent()) ?? '';
+  expect(printed).toContain('Cross-party summary');
+  expect(printed).toContain('Vehicle rent by owner');
+  expect(printed).toContain(PARTY_GOLDEN_PAYABLE);
+  expect(printed).toContain(PARTY_GOLDEN_RECEIVABLE);
+  expect(printed).toContain(PARTY_GOLDEN_RENT);
+
+  // Print media hides the shell and interactive UI, revealing only the report.
+  await page.emulateMedia({ media: 'print' });
+  await expect(page.getByTestId('party-report-print')).toBeVisible();
+  await expect(page.getByTestId('party-reports-print')).toBeHidden();
+  await page.emulateMedia({ media: 'screen' });
+
+  // Statements print exists too and cancelling prints nothing.
+  await page.getByTestId('nav-party/statements').click();
+  await page.getByTestId('party-statements-print').click();
+  await page.getByTestId('print-cancel').click();
+  await expect.poll(printCalls).toBe(1);
+});
+
 test('creates a new empty party book, fully separate from the sample', async ({ page }) => {
   await page.goto('/entry');
   await page.getByTestId('account-switcher').click();
   await page.getByTestId('account-new').click();
   await page.getByTestId('new-account-name').fill('Second Book');
-  await page.getByTestId('new-account-create').click();
+  await page.getByTestId('new-account-submit').click();
 
   await expect(page).toHaveURL(/\/party\/entry$/);
-  // Empty book: no seeded rows for today, and no parties configured.
-  await expect(page.getByTestId('party-day-empty')).toBeVisible();
+  // Empty book: no saved rows on the sheet, and no parties configured.
+  await expect(page.getByTestId('party-entry-save')).toBeVisible();
+  await expect(page.locator('.sheet__saved')).toHaveCount(0);
 
   await page.getByTestId('nav-party/reports').click();
   await expect(page.getByTestId('party-summary-empty')).toBeVisible();

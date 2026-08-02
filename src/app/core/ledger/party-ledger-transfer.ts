@@ -222,6 +222,10 @@ export class PartyLedgerTransfer {
       vehicles: Array.isArray(doc['vehicles'])
         ? (doc['vehicles'] as Record<string, unknown>[]).map(normaliseVehicle)
         : undefined,
+      // Staged entry-sheet rows; absent from backups made before drafts existed.
+      drafts: Array.isArray(doc['drafts'])
+        ? (doc['drafts'] as Record<string, unknown>[]).map(normaliseRow).filter((r) => r.id !== '')
+        : undefined,
     };
   }
 

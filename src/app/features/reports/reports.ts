@@ -14,6 +14,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { PageHeader } from '../../shared/ui/page-header';
 import { SectionCard } from '../../shared/ui/section-card';
 import { StatTile } from '../../shared/ui/stat-tile';
+import { AccountsStore } from '../../core/accounts/accounts-store';
 import { LedgerStore } from '../../core/ledger/ledger-store';
 import { formatDate, formatInr, formatMonth, formatTons } from '../../../domain/format';
 import {
@@ -23,13 +24,43 @@ import {
   vehicleRentReport,
 } from '../../../domain/reports';
 import type {
+  PrintChoice,
   PrintOptions,
   PrintOptionsData,
   PrintOptionsDialog,
-  PrintSection,
-} from './print-options-dialog';
+} from '../../shared/print/print-options-dialog';
+import { handoffToPrint, printStamp } from '../../shared/print/print-flow';
 
 export type ReportView = 'daily' | 'rent' | 'crusher' | 'monthly';
+/** The printable sections are exactly the four report views. */
+export type PrintSection = ReportView;
+
+const PRINT_CHOICES: readonly PrintChoice<PrintSection>[] = [
+  {
+    key: 'daily',
+    label: 'Daily summary',
+    hint: 'Totals and a per-crusher table for one date',
+    dateScoped: true,
+  },
+  {
+    key: 'rent',
+    label: 'Vehicle rent',
+    hint: 'Rent owed per vehicle on one date',
+    dateScoped: true,
+  },
+  {
+    key: 'crusher',
+    label: 'Crusher-wise',
+    hint: 'All-time totals per crusher',
+    dateScoped: false,
+  },
+  {
+    key: 'monthly',
+    label: 'Monthly',
+    hint: 'Quantity, discount and profit per month',
+    dateScoped: false,
+  },
+];
 
 /**
  * The four reports. Every figure is a pure function of the ledger rows — this
@@ -56,6 +87,11 @@ export type ReportView = 'daily' | 'rent' | 'crusher' | 'monthly';
 export class Reports {
   private readonly store = inject(LedgerStore);
   private readonly dialog = inject(MatDialog);
+
+  private readonly accounts = inject(AccountsStore);
+
+  /** The book's (renameable) name — the printout is titled with it. */
+  protected readonly accountName = computed(() => this.accounts.active().name);
 
   protected readonly ready = this.store.ready;
   /** Hydrated *and* seeded — see LedgerStore.initialised. */
@@ -140,35 +176,36 @@ export class Reports {
    */
   protected async print(): Promise<void> {
     // Lazy: the dialog and its checkbox module only load when someone prints.
-    const { PrintOptionsDialog: Dialog } = await import('./print-options-dialog');
+    const { PrintOptionsDialog: Dialog } = await import(
+      '../../shared/print/print-options-dialog'
+    );
 
-    const data: PrintOptionsData = {
+    const data: PrintOptionsData<PrintSection> = {
+      choices: PRINT_CHOICES,
       // Pre-tick whichever report is on screen.
-      sections: [this.view()],
-      date: this.date(),
-      emptySections: this.emptySections(),
+      selected: [this.view()],
+      dateLabel: this.dateLabel(),
+      emptyKeys: this.emptySections(),
     };
 
-    const ref = this.dialog.open<PrintOptionsDialog, PrintOptionsData, PrintOptions>(Dialog, {
-      data,
-      autoFocus: false,
-      width: '440px',
-      maxWidth: '94vw',
-    });
+    const ref = this.dialog.open<PrintOptionsDialog, PrintOptionsData<PrintSection>, PrintOptions<PrintSection>>(
+      Dialog,
+      {
+        data,
+        autoFocus: false,
+        width: '440px',
+        maxWidth: '94vw',
+      },
+    );
 
-    const options = await new Promise<PrintOptions | undefined>((resolve) =>
+    const options = await new Promise<PrintOptions<PrintSection> | undefined>((resolve) =>
       ref.afterClosed().subscribe(resolve),
     );
     if (!options?.sections.length) return;
 
-    this.printedAt.set(new Date().toLocaleString('en-IN'));
+    this.printedAt.set(printStamp());
     this.printSections.set(options.sections);
-
-    // Let the print block render before handing control to the browser; without
-    // this the dialog can still be closing and the print block still empty.
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-    window.print();
+    await handoffToPrint();
   }
 
   protected inr(value: number): string {

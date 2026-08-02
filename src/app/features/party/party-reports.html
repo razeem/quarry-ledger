@@ -3,7 +3,20 @@
     title="Reports"
     [subtitle]="account().name + ' — computed from the rows every time, nothing is stored.'"
     icon="insights"
-  />
+  >
+    <button
+      actions
+      mat-stroked-button
+      type="button"
+      class="no-print"
+      (click)="print()"
+      [disabled]="!initialised()"
+      data-testid="party-reports-print"
+    >
+      <mat-icon>print</mat-icon>
+      Print / PDF
+    </button>
+  </app-page-header>
 
   @if (!initialised()) {
     <p class="app-empty">Loading reports…</p>
@@ -132,4 +145,124 @@
       </app-section-card>
     </div>
   }
+
+  <!--
+    Print / save-as-PDF output. Hidden on screen, revealed by the global @media
+    print rules, and containing only the sections ticked in the print dialog.
+    Every figure comes from the same computeds the on-screen tables use.
+  -->
+  <div class="report-print" data-testid="party-report-print">
+    <h1 class="print-title">{{ account().name }}</h1>
+    <p class="print-meta">
+      @if (printedAt()) {
+        Generated {{ printedAt() }} ·
+      }
+      {{ summary().totals.loads }} loads · {{ tons(summary().totals.qty) }} on record
+    </p>
+
+    <!-- ---------- Cross-party summary ---------- -->
+    @if (includesSection('summary')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Cross-party summary</h2>
+
+        <dl class="print-kv">
+          <dt>Loads</dt>
+          <dd>{{ summary().totals.loads }}</dd>
+          <dt>Quantity</dt>
+          <dd>{{ tons(summary().totals.qty) }}</dd>
+          <dt>Quarry payable</dt>
+          <dd>{{ inr(summary().totals.quarryPayable) }}</dd>
+          <dt>Receivable</dt>
+          <dd>{{ inr(summary().totals.receivable) }}</dd>
+          <dt>Rent payable</dt>
+          <dd>{{ inr(summary().totals.rentPayable) }}</dd>
+          <dt>Profit</dt>
+          <dd>{{ inr(summary().totals.profitTotal) }}</dd>
+        </dl>
+
+        @if (summary().parties.length === 0) {
+          <p class="print-empty">No loads on record.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Party</th>
+                <th scope="col">Loads</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Quarry ₹</th>
+                <th scope="col">Receivable</th>
+                <th scope="col">Rent ₹</th>
+                <th scope="col">Profit</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (party of summary().parties; track party.party) {
+                <tr>
+                  <td>{{ party.party }}</td>
+                  <td>{{ party.loads }}</td>
+                  <td>{{ tons(party.qty) }}</td>
+                  <td>{{ inr(party.quarryPayable) }}</td>
+                  <td>{{ inr(party.receivable) }}</td>
+                  <td>{{ inr(party.rentPayable) }}</td>
+                  <td>{{ inr(party.profitTotal) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td>{{ summary().totals.loads }}</td>
+                <td>{{ tons(summary().totals.qty) }}</td>
+                <td>{{ inr(summary().totals.quarryPayable) }}</td>
+                <td>{{ inr(summary().totals.receivable) }}</td>
+                <td>{{ inr(summary().totals.rentPayable) }}</td>
+                <td>{{ inr(summary().totals.profitTotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+
+    <!-- ---------- Vehicle rent by owner ---------- -->
+    @if (includesSection('owners')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Vehicle rent by owner</h2>
+        <p class="print-section__sub">Across every party, all time. Without-rent trips carry no rent.</p>
+
+        @if (owners().length === 0) {
+          <p class="print-empty">No with-rent loads on record.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Owner</th>
+                <th scope="col">Trips</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Rent ₹</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of owners(); track line.owner) {
+                <tr>
+                  <td>{{ line.owner || '—' }}</td>
+                  <td>{{ line.trips }}</td>
+                  <td>{{ tons(line.qty) }}</td>
+                  <td>{{ inr(line.rent) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td></td>
+                <td></td>
+                <td>{{ inr(ownersTotal()) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+  </div>
 </div>

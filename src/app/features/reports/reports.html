@@ -326,7 +326,7 @@
     Every figure comes from the same computeds the on-screen reports use.
   -->
   <div class="report-print" data-testid="report-print">
-    <h1 class="print-title">Quarry Ledger</h1>
+    <h1 class="print-title">{{ accountName() }}</h1>
     <p class="print-meta">
       @if (printedAt()) {
         Generated {{ printedAt() }} ·

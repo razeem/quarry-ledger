@@ -213,3 +213,57 @@ export function groupPartyRowsByDay(rows: readonly PartyLedgerRow[]): PartyDayGr
 export function activePartyDates(rows: readonly PartyLedgerRow[]): string[] {
   return [...new Set(rows.map((row) => row.date))].sort((a, b) => b.localeCompare(a));
 }
+
+/**
+ * The last `days` active dates as an inclusive `[from, to]` range, or null with
+ * no rows — the party twin of the daily ledger's `lastActiveDateRange`.
+ */
+export function lastActivePartyDateRange(
+  rows: readonly PartyLedgerRow[],
+  days = 5,
+): [string, string] | null {
+  const dates = activePartyDates(rows); // already most-recent-first
+  if (dates.length === 0) return null;
+  const window = dates.slice(0, Math.max(1, days));
+  return [window[window.length - 1], window[0]];
+}
+
+// --- Ledger-page filtering -------------------------------------------------------
+
+/** The party Ledger page's filters. Empty string / undefined means "any". */
+export interface PartyRowFilter {
+  from?: string;
+  to?: string;
+  /** Exact party name (picked from the known list). */
+  party?: string;
+  /** Exact owner name — a free-text business key, compared raw. The seed's
+   * `Ratheeesh 8334` / ` Ratheesh 8334` drift stays two distinct owners. */
+  owner?: string;
+  /** Case-sensitive substring of the RAW registration (never normalised). */
+  vehicle?: string;
+  /** 'with' | 'without' | '' (any). */
+  rentMode?: 'with' | 'without' | '';
+}
+
+/** Apply the party Ledger page's filters. Pure; every criterion is optional. */
+export function filterPartyRows(
+  rows: readonly PartyLedgerRow[],
+  filter: PartyRowFilter,
+): PartyLedgerRow[] {
+  const lo = filter.from && filter.to && filter.from > filter.to ? filter.to : filter.from;
+  const hi = filter.from && filter.to && filter.from > filter.to ? filter.from : filter.to;
+  return rows.filter(
+    (row) =>
+      (!lo || row.date >= lo) &&
+      (!hi || row.date <= hi) &&
+      (!filter.party || row.party === filter.party) &&
+      (!filter.owner || row.owner === filter.owner) &&
+      (!filter.vehicle || row.vehicle.includes(filter.vehicle)) &&
+      (!filter.rentMode || row.withRent === (filter.rentMode === 'with')),
+  );
+}
+
+/** Newest date first; ties keep entry order (stable sort). For the flat table. */
+export function sortPartyRowsByDateDesc(rows: readonly PartyLedgerRow[]): PartyLedgerRow[] {
+  return [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}

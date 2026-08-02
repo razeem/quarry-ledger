@@ -1,0 +1,189 @@
+<div class="app-page">
+  <app-page-header
+    title="Ledger"
+    [subtitle]="account().name + ' — every load across every party.'"
+    icon="receipt_long"
+  />
+
+  <app-section-card title="Filters" icon="filter_list" class="block mb-4">
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="flex-1 min-w-[140px]">
+        <label class="app-label" for="party-ledger-from">From</label>
+        <input
+          id="party-ledger-from"
+          class="app-field"
+          type="date"
+          [ngModel]="from()"
+          (ngModelChange)="setFrom($event)"
+          name="from"
+          data-testid="party-ledger-from"
+        />
+      </div>
+      <div class="flex-1 min-w-[140px]">
+        <label class="app-label" for="party-ledger-to">To</label>
+        <input
+          id="party-ledger-to"
+          class="app-field"
+          type="date"
+          [ngModel]="to()"
+          (ngModelChange)="setTo($event)"
+          name="to"
+          data-testid="party-ledger-to"
+        />
+      </div>
+      <div class="flex-1 min-w-[150px]">
+        <label class="app-label" for="party-ledger-filter-party">Party</label>
+        <select
+          id="party-ledger-filter-party"
+          class="app-field"
+          [ngModel]="party()"
+          (ngModelChange)="setParty($event)"
+          name="party"
+          data-testid="party-ledger-filter-party"
+        >
+          <option value="">All parties</option>
+          @for (name of partyOptions(); track name) {
+            <option [value]="name">{{ name }}</option>
+          }
+        </select>
+      </div>
+      <div class="flex-1 min-w-[150px]">
+        <label class="app-label" for="party-ledger-filter-owner">Owner</label>
+        <select
+          id="party-ledger-filter-owner"
+          class="app-field"
+          [ngModel]="owner()"
+          (ngModelChange)="setOwner($event)"
+          name="owner"
+          data-testid="party-ledger-filter-owner"
+        >
+          <option value="">All owners</option>
+          @for (name of ownerOptions(); track name) {
+            <option [value]="name">{{ name }}</option>
+          }
+        </select>
+      </div>
+      <div class="flex-1 min-w-[140px]">
+        <label class="app-label" for="party-ledger-filter-vehicle">Vehicle</label>
+        <!-- Substring of the raw registration — free text is never normalised. -->
+        <input
+          id="party-ledger-filter-vehicle"
+          class="app-field"
+          type="text"
+          placeholder="e.g. 4183"
+          autocomplete="off"
+          [ngModel]="vehicle()"
+          (ngModelChange)="setVehicle($event)"
+          name="vehicle"
+          data-testid="party-ledger-filter-vehicle"
+        />
+      </div>
+      <div class="flex-1 min-w-[120px]">
+        <label class="app-label" for="party-ledger-filter-rent">Rent</label>
+        <select
+          id="party-ledger-filter-rent"
+          class="app-field"
+          [ngModel]="rentMode()"
+          (ngModelChange)="setRentMode($event)"
+          name="rentMode"
+          data-testid="party-ledger-filter-rent"
+        >
+          <option value="">All</option>
+          <option value="with">With rent</option>
+          <option value="without">Without rent</option>
+        </select>
+      </div>
+      <button
+        mat-stroked-button
+        type="button"
+        (click)="showAll()"
+        data-testid="party-ledger-show-all"
+      >
+        <mat-icon>select_all</mat-icon>
+        All {{ totalRowCount() }} rows
+      </button>
+    </div>
+
+    <p class="text-sm text-[var(--text-soft)] mt-3 mb-0" data-testid="party-ledger-summary">
+      Showing <strong>{{ rangeTotal().loads }}</strong> loads ·
+      <span class="app-num">{{ tons(rangeTotal().qty) }}</span> · quarry
+      <span class="app-num">{{ inr(rangeTotal().quarryPayable) }}</span> · receivable
+      <span class="app-num">{{ inr(rangeTotal().receivable) }}</span> · rent
+      <span class="app-num">{{ inr(rangeTotal().rentPayable) }}</span>
+    </p>
+  </app-section-card>
+
+  @if (!initialised()) {
+    <p class="app-empty">Loading the party ledger…</p>
+  } @else if (filteredRows().length === 0) {
+    <p class="app-empty" data-testid="party-ledger-empty">
+      No loads match these filters. Widen them, or add a load from the Entry tab.
+    </p>
+  } @else {
+    <app-section-card title="Loads" icon="receipt_long">
+      <!-- The table scrolls inside this box; the page never scrolls sideways. -->
+      <div class="overflow-x-auto -mx-1 px-1">
+        <table class="app-table" data-testid="party-ledger-table">
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Party</th>
+              <th scope="col">Vehicle</th>
+              <th scope="col">Owner</th>
+              <th scope="col" class="app-num">Qty</th>
+              <th scope="col">Rent</th>
+              <th scope="col" class="app-num">Quarry ₹</th>
+              <th scope="col" class="app-num">Bill ₹</th>
+              <th scope="col" class="app-num">Rent ₹</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of paged().page; track row.id) {
+              <tr>
+                <td class="whitespace-nowrap">{{ day(row.date) }}</td>
+                <td>{{ row.party }}</td>
+                <td>{{ row.vehicle || '—' }}</td>
+                <td>{{ row.owner || '—' }}</td>
+                <td class="app-num">{{ row.qty.toFixed(2) }}</td>
+                <td>{{ row.withRent ? 'With' : 'W/O' }}</td>
+                <td class="app-num">{{ inr(calc(row).quarryAmount) }}</td>
+                <td class="app-num">{{ inr(calc(row).billAmount) }}</td>
+                <td class="app-num">{{ inr(calc(row).rentAmount) }}</td>
+                <td class="whitespace-nowrap">
+                  <button
+                    mat-icon-button
+                    type="button"
+                    (click)="editRow(row)"
+                    [attr.aria-label]="'Edit load of ' + row.party"
+                    [attr.data-testid]="'party-ledger-row-edit-' + row.id"
+                  >
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button
+                    mat-icon-button
+                    type="button"
+                    (click)="deleteRow(row)"
+                    [attr.aria-label]="'Delete load of ' + row.party"
+                    [attr.data-testid]="'party-ledger-row-delete-' + row.id"
+                  >
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-3">
+        <app-paginator
+          [pageIndex]="paged().clampedIndex"
+          [pageCount]="paged().pageCount"
+          [caption]="pagerCaption()"
+          (pageChange)="setPage($event)"
+        />
+      </div>
+    </app-section-card>
+  }
+</div>

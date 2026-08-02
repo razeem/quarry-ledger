@@ -10,77 +10,75 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
-import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PageHeader } from '../../shared/ui/page-header';
 import { SectionCard } from '../../shared/ui/section-card';
 import { Paginator } from '../../shared/ui/paginator';
 import { pageOf } from '../../shared/ledger/paging';
 import { deleteRowWithUndo } from '../../shared/ledger/undo-delete';
-import { LedgerStore } from '../../core/ledger/ledger-store';
-import { computeRow } from '../../../domain/calc';
-import { formatDate, formatInr, formatTons } from '../../../domain/format';
+import { PartyLedgerStore } from '../../core/ledger/party-ledger-store';
+import { computePartyRow, type ComputedPartyRow } from '../../../domain/party/calc';
 import {
-  filterLedgerRows,
-  lastActiveDateRange,
-  sortByDateDesc,
-  type LedgerRowFilter,
-} from '../../../domain/reports';
-import { summarize } from '../../../domain/summaries';
-import type { LedgerRow } from '../../../domain/types';
-import { RowDetailDialog, type RowDetailData, type RowDetailResult } from './row-detail-dialog';
+  filterPartyRows,
+  lastActivePartyDateRange,
+  partySummaryReport,
+  sortPartyRowsByDateDesc,
+  type PartyRowFilter,
+} from '../../../domain/party/reports';
+import { formatDate, formatInr, formatTons } from '../../../domain/format';
+import type { PartyLedgerRow } from '../../../domain/party/types';
 
-/** Rows per page. Also comfortably above the default 5-active-day row count. */
+/** Rows per page — matches the daily Ledger page. */
 const PAGE_SIZE = 25;
 
 /**
- * The Daily Ledger — every row on record in one flat, filterable, paginated
- * table, newest date first. Tapping a row opens its full breakdown, from which
- * it can be edited or deleted.
+ * The party book's Ledger — every load across every party in one flat,
+ * filterable, paginated table, newest date first. Rows edit on the Entry sheet
+ * (via `?edit=`) and delete here with an id-preserving Undo.
  */
 @Component({
-  selector: 'app-ledger',
+  selector: 'app-party-ledger',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, MatIconModule, MatButtonModule, PageHeader, SectionCard, Paginator],
-  templateUrl: './ledger.html',
+  templateUrl: './party-ledger.html',
 })
-export class Ledger {
-  private readonly store = inject(LedgerStore);
-  private readonly dialog = inject(MatDialog);
+export class PartyLedger {
+  private readonly store = inject(PartyLedgerStore);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
 
+  protected readonly account = this.store.account;
   protected readonly ready = this.store.ready;
-  /** Hydrated *and* seeded — see LedgerStore.initialised. */
+  /** Hydrated *and* seeded — see PartyLedgerStore.initialised. */
   protected readonly initialised = this.store.initialised;
+
   protected readonly from = signal('');
   protected readonly to = signal('');
-  protected readonly crusher = signal('');
-  protected readonly passType = signal('');
+  protected readonly party = signal('');
+  protected readonly owner = signal('');
   protected readonly vehicle = signal('');
+  protected readonly rentMode = signal<'' | 'with' | 'without'>('');
   protected readonly pageIndex = signal(0);
 
-  protected readonly crusherOptions = this.store.crusherOptions;
+  protected readonly partyOptions = this.store.partyOptions;
+  /** Distinct owners exactly as written on rows — free-text keys, never merged. */
+  protected readonly ownerOptions = computed(() =>
+    [...new Set(this.store.rows().map((row) => row.owner).filter(Boolean))].sort(),
+  );
 
-  /**
-   * Set as soon as the user touches the filter. Seeding is asynchronous, so
-   * without this a filter changed during the first load would be silently
-   * overwritten the moment the default range was applied.
-   */
+  /** Set on any filter touch, so the async default range backs off. */
   private rangeTouched = false;
 
   constructor() {
-    // Default to the 5 most recent dates that actually have rows. A calendar
-    // window would usually be empty — the quarry runs in bursts.
-    // Waits for `initialised`, not `ready`: on a fresh device `ready` flips true
-    // before the seed lands, which would latch this onto an empty row set.
+    // Default to the 5 most recent active dates. Waits for `initialised`, never
+    // `ready` — on a fresh device the seed lands after hydration (CLAUDE.md).
     const seedRange = effect(() => {
       if (this.rangeTouched) {
         seedRange.destroy();
         return;
       }
       if (!this.store.initialised()) return;
-      const range = lastActiveDateRange(this.store.rows(), 5);
+      const range = lastActivePartyDateRange(this.store.rows(), 5);
       seedRange.destroy();
       if (this.rangeTouched || !range) return;
       this.from.set(range[0]);
@@ -90,7 +88,6 @@ export class Ledger {
 
   // --- Filters ---------------------------------------------------------------
 
-  /** Any user edit of the range, from either date field. */
   protected setFrom(value: string): void {
     this.rangeTouched = true;
     this.from.set(value);
@@ -103,13 +100,13 @@ export class Ledger {
     this.pageIndex.set(0);
   }
 
-  protected setCrusher(value: string): void {
-    this.crusher.set(value);
+  protected setParty(value: string): void {
+    this.party.set(value);
     this.pageIndex.set(0);
   }
 
-  protected setPassType(value: string): void {
-    this.passType.set(value);
+  protected setOwner(value: string): void {
+    this.owner.set(value);
     this.pageIndex.set(0);
   }
 
@@ -118,37 +115,45 @@ export class Ledger {
     this.pageIndex.set(0);
   }
 
+  protected setRentMode(value: '' | 'with' | 'without'): void {
+    this.rentMode.set(value);
+    this.pageIndex.set(0);
+  }
+
   /** Reset every filter to show the full record. */
   protected showAll(): void {
     this.rangeTouched = true;
     this.from.set('');
     this.to.set('');
-    this.crusher.set('');
-    this.passType.set('');
+    this.party.set('');
+    this.owner.set('');
     this.vehicle.set('');
+    this.rentMode.set('');
     this.pageIndex.set(0);
   }
 
   // --- Rows ------------------------------------------------------------------
 
-  private readonly filter = computed<LedgerRowFilter>(() => ({
+  private readonly filter = computed<PartyRowFilter>(() => ({
     from: this.from(),
     to: this.to(),
-    crusher: this.crusher(),
-    passType: this.passType() as LedgerRowFilter['passType'],
+    party: this.party(),
+    owner: this.owner(),
     vehicle: this.vehicle(),
+    rentMode: this.rentMode(),
   }));
 
   /** Everything matching the filters — totals always cover this whole set. */
   protected readonly filteredRows = computed(() =>
-    sortByDateDesc(filterLedgerRows(this.store.rows(), this.filter())),
+    sortPartyRowsByDateDesc(filterPartyRows(this.store.rows(), this.filter())),
   );
 
   protected readonly paged = computed(() =>
     pageOf(this.filteredRows(), this.pageIndex(), PAGE_SIZE),
   );
 
-  protected readonly rangeTotal = computed(() => summarize(this.filteredRows()));
+  /** Totals via the same engine as the reports — the rounding contract holds. */
+  protected readonly rangeTotal = computed(() => partySummaryReport(this.filteredRows()).totals);
   protected readonly totalRowCount = computed(() => this.store.rows().length);
 
   protected readonly pagerCaption = computed(() => {
@@ -165,40 +170,26 @@ export class Ledger {
 
   // --- Row actions -------------------------------------------------------------
 
-  protected async openRow(row: LedgerRow): Promise<void> {
-    const ref = this.dialog.open<RowDetailDialog, RowDetailData, RowDetailResult>(RowDetailDialog, {
-      data: { row, vehicles: this.store.vehicles() },
-      autoFocus: false,
-      width: '420px',
-      maxWidth: '94vw',
+  /** Edit on the Entry sheet — the id is the merge key, safe in the URL. */
+  protected editRow(row: PartyLedgerRow): void {
+    void this.router.navigate(['/party/entry'], { queryParams: { edit: row.id } });
+  }
+
+  protected async deleteRow(row: PartyLedgerRow): Promise<void> {
+    await deleteRowWithUndo(this.snackBar, {
+      message: 'Row deleted',
+      doDelete: () => this.store.deleteRow(row.id),
+      restore: () => {
+        this.store.mergeImport({ rows: [row] });
+        return this.store.flush();
+      },
     });
-
-    const action = await new Promise<RowDetailResult>((resolve) =>
-      ref.afterClosed().subscribe(resolve),
-    );
-
-    if (action === 'edit') {
-      // The id is the merge key and never changes, so it is safe in the URL.
-      void this.router.navigate(['/entry'], { queryParams: { edit: row.id } });
-      return;
-    }
-
-    if (action === 'delete') {
-      await deleteRowWithUndo(this.snackBar, {
-        message: 'Row deleted',
-        doDelete: () => this.store.deleteRow(row.id),
-        restore: () => {
-          this.store.mergeImport({ rows: [row] });
-          return this.store.flush();
-        },
-      });
-    }
   }
 
   // --- Formatting ----------------------------------------------------------------
 
-  protected rowProfit(row: LedgerRow): number {
-    return computeRow(row).profit;
+  protected calc(row: PartyLedgerRow): ComputedPartyRow {
+    return computePartyRow(row);
   }
 
   protected day(iso: string): string {

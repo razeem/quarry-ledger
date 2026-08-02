@@ -38,11 +38,14 @@
           <thead>
             <tr>
               @for (col of COLUMNS; track col.key) {
+                <!-- Fixed-width unless flex: only the free-text columns absorb
+                     surplus width, so numeric cells stay compact on wide screens. -->
                 <th
                   scope="col"
                   [class.sheet__th--auto]="col.group === 'auto'"
                   [class.sheet__th--calc]="col.group === 'calc'"
                   [style.min-width.px]="col.width"
+                  [style.width.px]="col.flex ? null : col.width"
                 >
                   {{ col.label }}
                 </th>
@@ -52,45 +55,147 @@
 
           <tbody>
             <!-- ---------- rows already saved for this date, oldest first ---------- -->
+            <!-- Base-ledger rows first, then staged drafts (still editable here). -->
             @for (view of dayRowViews(); track view.row.id) {
-              <tr class="sheet__saved">
-                <td>{{ view.row.date }}</td>
-                <td>{{ view.row.crusher }}</td>
-                <td>{{ view.row.passType ?? '\u2014' }}</td>
-                <td class="app-num text-right">{{ view.row.qty.toFixed(2) }}</td>
+              <tr
+                class="sheet__saved"
+                [class.sheet__saved--draft]="view.kind === 'draft'"
+                [attr.data-testid]="'entry-saved-' + view.row.id"
+              >
+                <!-- Draft rows are LIVE cells: every change persists directly, no
+                     pencil needed. Enter is swallowed in them so it never
+                     re-submits the entry row while an editor works up here. -->
+                @if (view.kind === 'draft') {
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="date"
+                      [ngModel]="view.row.date"
+                      (ngModelChange)="patchDraft(view.row, { date: $event })"
+                      [ngModelOptions]="{ standalone: true }"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft date"
+                      [attr.data-testid]="'draft-date-' + view.row.id"
+                    />
+                  </td>
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="Crusher"
+                      [ngModel]="view.row.crusher"
+                      (ngModelChange)="patchDraftCrusher(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      [matAutocomplete]="draftCrusherAuto"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft crusher"
+                      [attr.data-testid]="'draft-crusher-' + view.row.id"
+                    />
+                    <mat-autocomplete #draftCrusherAuto="matAutocomplete">
+                      @for (name of filterCrushers(view.row.crusher); track name) {
+                        <mat-option [value]="name">{{ name }}</mat-option>
+                      }
+                    </mat-autocomplete>
+                  </td>
+                } @else {
+                  <td>{{ view.row.date }}</td>
+                  <td>{{ view.row.crusher }}</td>
+                }
+                @if (view.kind === 'draft') {
+                  <td class="sheet__editcell">
+                    <select
+                      class="sheet__cell"
+                      [ngModel]="view.row.passType"
+                      (ngModelChange)="patchDraftPassType(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft pass type"
+                      [attr.data-testid]="'draft-pass-' + view.row.id"
+                    >
+                      <option value="Pass">Pass</option>
+                      <option value="WO Pass">WO Pass</option>
+                    </select>
+                  </td>
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell sheet__cell--num"
+                      type="number"
+                      inputmode="decimal"
+                      step="0.01"
+                      min="0"
+                      [ngModel]="view.row.qty"
+                      (ngModelChange)="patchDraftQty(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft quantity"
+                      [attr.data-testid]="'draft-qty-' + view.row.id"
+                    />
+                  </td>
+                } @else {
+                  <td>{{ view.row.passType ?? '\u2014' }}</td>
+                  <td class="app-num text-right">{{ view.row.qty.toFixed(2) }}</td>
+                }
                 <!--
                   A rate that no longer matches the chart is highlighted, so an
-                  overridden row stands out from the autopopulated ones.
+                  overridden row stands out from the autopopulated ones. On a
+                  draft the cell is a live input; the highlight is the same.
                 -->
-                <td
-                  class="app-num text-right"
-                  [class.sheet__saved--differs]="view.differs.quaryRate"
-                  [attr.title]="view.differs.quaryRate ? DIFFERS_HINT : null"
-                >
-                  {{ view.row.quaryRate }}
-                </td>
-                <td
-                  class="app-num text-right"
-                  [class.sheet__saved--differs]="view.differs.crusherRate"
-                  [attr.title]="view.differs.crusherRate ? DIFFERS_HINT : null"
-                >
-                  {{ view.row.crusherRate }}
-                </td>
-                <td
-                  class="app-num text-right"
-                  [class.sheet__saved--differs]="view.differs.rentRate"
-                  [attr.title]="view.differs.rentRate ? DIFFERS_HINT : null"
-                >
-                  {{ view.row.rentRate }}
-                </td>
-                <td
-                  class="app-num text-right"
-                  [class.sheet__saved--differs]="view.differs.commRate"
-                  [attr.title]="view.differs.commRate ? DIFFERS_HINT : null"
-                >
-                  {{ view.row.commRate }}
-                </td>
-                <td>{{ view.row.vehicle || '\u2014' }}</td>
+                @for (rate of RATE_COLUMNS; track rate.field) {
+                  <td
+                    [class.sheet__editcell]="view.kind === 'draft'"
+                    [class.app-num]="view.kind !== 'draft'"
+                    [class.text-right]="view.kind !== 'draft'"
+                    [class.sheet__saved--differs]="view.differs[rate.field]"
+                    [attr.title]="view.differs[rate.field] ? DIFFERS_HINT : null"
+                  >
+                    @if (view.kind === 'draft') {
+                      <input
+                        class="sheet__cell sheet__cell--num"
+                        type="number"
+                        inputmode="decimal"
+                        step="1"
+                        [ngModel]="view.row[rate.field]"
+                        (ngModelChange)="patchDraftRate(view.row, rate.field, $event)"
+                        [ngModelOptions]="{ standalone: true }"
+                        (keydown.enter)="$event.preventDefault()"
+                        (focus)="revealCell($event)"
+                        [attr.aria-label]="'Draft ' + rate.label"
+                        [attr.data-testid]="'draft-' + rate.field + '-' + view.row.id"
+                      />
+                    } @else {
+                      {{ view.row[rate.field] }}
+                    }
+                  </td>
+                }
+                @if (view.kind === 'draft') {
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="Vehicle"
+                      [ngModel]="view.row.vehicle"
+                      (ngModelChange)="patchDraft(view.row, { vehicle: $event })"
+                      [ngModelOptions]="{ standalone: true }"
+                      [matAutocomplete]="draftVehicleAuto"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft vehicle"
+                      [attr.data-testid]="'draft-vehicle-' + view.row.id"
+                    />
+                    <mat-autocomplete #draftVehicleAuto="matAutocomplete">
+                      @for (num of filterVehicles(view.row.vehicle); track num) {
+                        <mat-option [value]="num">{{ num }}</mat-option>
+                      }
+                    </mat-autocomplete>
+                  </td>
+                } @else {
+                  <td>{{ view.row.vehicle || '\u2014' }}</td>
+                }
                 <td class="app-num text-right">{{ inr(view.calc.crusherAmount) }}</td>
                 <td class="app-num text-right">{{ inr(view.calc.quaryAmount) }}</td>
                 <td class="app-num text-right">{{ view.calc.vehicleTon.toFixed(2) }}</td>
@@ -99,6 +204,41 @@
                   {{ inr(view.calc.profit) }}
                 </td>
                 <td class="app-num text-right">{{ inr(view.calc.discount) }}</td>
+                <td class="sheet__rowactions">
+                  @if (view.kind === 'draft') {
+                    <!-- Drafts edit in place — no pencil, just the marker. -->
+                    <span
+                      class="sheet__draft-chip"
+                      [attr.title]="
+                        view.incomplete
+                          ? 'Staged here — needs a crusher before it can be saved to the ledger'
+                          : 'Staged here — included in the next “Save to ledger”'
+                      "
+                      >draft</span
+                    >
+                  } @else {
+                    <button
+                      mat-icon-button
+                      type="button"
+                      class="!h-9 !w-9"
+                      (click)="editRow(view)"
+                      [attr.aria-label]="'Edit row of ' + (view.row.crusher || 'no crusher')"
+                      [attr.data-testid]="'entry-row-edit-' + view.row.id"
+                    >
+                      <mat-icon class="!text-lg">edit</mat-icon>
+                    </button>
+                  }
+                  <button
+                    mat-icon-button
+                    type="button"
+                    class="!h-9 !w-9"
+                    (click)="deleteRow(view)"
+                    [attr.aria-label]="'Delete row of ' + (view.row.crusher || 'no crusher')"
+                    [attr.data-testid]="'entry-row-delete-' + view.row.id"
+                  >
+                    <mat-icon class="!text-lg">delete</mat-icon>
+                  </button>
+                </td>
               </tr>
             }
 
@@ -118,25 +258,26 @@
               </td>
 
               <td>
+                <!-- Free text with a real dropdown: a brand-new crusher can be
+                     typed straight in, and a chosen value reopens the full list. -->
                 <input
                   class="sheet__cell"
                   type="text"
-                  list="crusher-options"
                   autocomplete="off"
                   placeholder="Crusher"
                   aria-label="Crusher"
                   [ngModel]="crusher()"
                   (ngModelChange)="onCrusherChange($event)"
+                  [matAutocomplete]="crusherAuto"
                   (focus)="revealCell($event)"
                   name="crusher"
                   data-testid="entry-crusher"
                 />
-                <!-- Free text: a brand-new crusher can be typed straight in. -->
-                <datalist id="crusher-options">
-                  @for (name of crushers(); track name) {
-                    <option [value]="name"></option>
+                <mat-autocomplete #crusherAuto="matAutocomplete">
+                  @for (name of crusherPanel(); track name) {
+                    <mat-option [value]="name">{{ name }}</mat-option>
                   }
-                </datalist>
+                </mat-autocomplete>
               </td>
 
               <td>
@@ -198,25 +339,25 @@
               }
 
               <td>
+                <!-- Registrations are messy free text and are never normalised. -->
                 <input
                   class="sheet__cell"
                   type="text"
-                  list="vehicle-options"
                   autocomplete="off"
                   placeholder="Vehicle"
                   aria-label="Vehicle registration"
                   [ngModel]="vehicle()"
                   (ngModelChange)="vehicle.set($event)"
+                  [matAutocomplete]="vehicleAuto"
                   (focus)="revealCell($event)"
                   name="vehicle"
                   data-testid="entry-vehicle"
                 />
-                <!-- Registrations are messy free text and are never normalised. -->
-                <datalist id="vehicle-options">
-                  @for (num of vehicles(); track num) {
-                    <option [value]="num"></option>
+                <mat-autocomplete #vehicleAuto="matAutocomplete">
+                  @for (num of vehiclePanel(); track num) {
+                    <mat-option [value]="num">{{ num }}</mat-option>
                   }
-                </datalist>
+                </mat-autocomplete>
               </td>
 
               <!-- Computed columns: read-only, straight from the domain engine. -->
@@ -234,6 +375,7 @@
                 {{ inr(preview().profit) }}
               </td>
               <td class="sheet__calc app-num">{{ inr(preview().discount) }}</td>
+              <td></td>
             </tr>
           </tbody>
         </table>
@@ -291,13 +433,37 @@
         {{ isEditing() ? 'Update row' : 'Add row' }}
       </button>
 
+      <!-- New rows stage as drafts; this moves every complete one to the ledger. -->
+      <button
+        mat-stroked-button
+        class="!min-h-14"
+        type="button"
+        (click)="syncDraftsToLedger()"
+        [disabled]="syncableCount() === 0 || syncing() || !initialised()"
+        data-testid="entry-sync-drafts"
+      >
+        <mat-icon>done_all</mat-icon>
+        Save {{ syncableCount() }} to ledger
+      </button>
+
       @if (!initialised()) {
         <p class="m-0 text-sm text-[var(--text-soft)]">Loading the rate chart…</p>
       } @else if (!canSave()) {
-        <p class="m-0 text-sm text-[var(--text-soft)]">Fill in a crusher and a quantity above 0.</p>
+        <p class="m-0 text-sm text-[var(--text-soft)]">
+          @if (editingKind() === 'row') {
+            Fill in a crusher and a quantity above 0.
+          } @else {
+            Enter a quantity above 0 — the crusher can come later.
+          }
+        </p>
       } @else if (!isEditing()) {
         <p class="m-0 text-sm text-[var(--text-soft)]">
           Press Enter to add, then just type the next quantity.
+        </p>
+      }
+      @if (initialised() && heldCount() > 0) {
+        <p class="m-0 text-sm text-[var(--text-soft)]" data-testid="entry-held-note">
+          {{ heldCount() }} draft{{ heldCount() === 1 ? '' : 's' }} still need a crusher.
         </p>
       }
     </div>
@@ -317,6 +483,10 @@
           {{ rowsDifferingFromChart() === 1 ? 'row' : 'rows' }} below)
         }
       </span>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="sheet__draft-chip">draft</span>
+        Staged here until “Save to ledger”
+      </span>
     </p>
 
     @if (dayTotals().loads) {
@@ -325,7 +495,7 @@
         <span class="app-num">{{ tons(dayTotals().qty) }}</span> · profit
         <span class="app-num">{{ inr(dayTotals().profit) }}</span>
         @if (hiddenDayRows() > 0) {
-          · showing the latest {{ dayRows().length }}
+          · showing the latest {{ dayRowViews().length }}
         }
       </p>
     }

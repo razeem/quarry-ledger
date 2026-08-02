@@ -3,63 +3,37 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
-import { formatDate } from '../../../domain/format';
 
-/** The printable report sections. */
-export type PrintSection = 'daily' | 'rent' | 'crusher' | 'monthly';
-
-export interface PrintOptions {
-  sections: PrintSection[];
-  /** Date driving the two date-scoped sections. */
-  date: string;
-}
-
-export interface PrintOptionsData {
-  /** Pre-ticked sections (defaults to whichever view is open). */
-  sections: PrintSection[];
-  date: string;
-  /** Sections that would print empty, so they can be flagged in the list. */
-  emptySections: PrintSection[];
-}
-
-interface SectionChoice {
-  key: PrintSection;
+/** One printable section a page offers. */
+export interface PrintChoice<K extends string = string> {
+  key: K;
   label: string;
   hint: string;
-  /** True when this section is scoped to the chosen date rather than all time. */
-  dateScoped: boolean;
+  /** True when the section is scoped to a chosen date rather than all time. */
+  dateScoped?: boolean;
 }
 
-const SECTIONS: readonly SectionChoice[] = [
-  {
-    key: 'daily',
-    label: 'Daily summary',
-    hint: 'Totals and a per-crusher table for one date',
-    dateScoped: true,
-  },
-  {
-    key: 'rent',
-    label: 'Vehicle rent',
-    hint: 'Rent owed per vehicle on one date',
-    dateScoped: true,
-  },
-  {
-    key: 'crusher',
-    label: 'Crusher-wise',
-    hint: 'All-time totals per crusher',
-    dateScoped: false,
-  },
-  {
-    key: 'monthly',
-    label: 'Monthly',
-    hint: 'Quantity, discount and profit per month',
-    dateScoped: false,
-  },
-];
+export interface PrintOptionsData<K extends string = string> {
+  /** The page's sections, in the order they will print. */
+  choices: readonly PrintChoice<K>[];
+  /** Pre-ticked sections (usually whichever view is open). */
+  selected: readonly K[];
+  /** Label shown next to date-scoped choices, e.g. "29 Nov 2025". */
+  dateLabel?: string;
+  /** Sections that would print with no rows, flagged in the list. */
+  emptyKeys: readonly K[];
+}
+
+export interface PrintOptions<K extends string = string> {
+  /** Chosen sections, in the canonical `choices` order. */
+  sections: K[];
+}
 
 /**
- * Pick which report sections go into the printout before opening the browser's
- * print dialog (where "Save as PDF" is the usual destination).
+ * Pick which of a page's report sections go into the printout before opening
+ * the browser's print dialog (where "Save as PDF" is the usual destination).
+ * Generic over the section keys — the daily Reports page and both party pages
+ * pass their own choice lists.
  */
 @Component({
   selector: 'app-print-options-dialog',
@@ -75,7 +49,7 @@ const SECTIONS: readonly SectionChoice[] = [
       </p>
 
       <div class="flex flex-col gap-3">
-        @for (section of sections; track section.key) {
+        @for (section of data.choices; track section.key) {
           <div>
             <mat-checkbox
               [checked]="isChecked(section.key)"
@@ -83,8 +57,8 @@ const SECTIONS: readonly SectionChoice[] = [
               [attr.data-testid]="'print-section-' + section.key"
             >
               {{ section.label }}
-              @if (section.dateScoped) {
-                <span class="text-[var(--text-soft)]">· {{ dateLabel }}</span>
+              @if (section.dateScoped && data.dateLabel) {
+                <span class="text-[var(--text-soft)]">· {{ data.dateLabel }}</span>
               }
             </mat-checkbox>
             <p class="mt-0 mb-0 ml-9 text-xs text-[var(--text-soft)]">
@@ -114,25 +88,22 @@ const SECTIONS: readonly SectionChoice[] = [
 })
 export class PrintOptionsDialog {
   private readonly dialogRef = inject(MatDialogRef<PrintOptionsDialog, PrintOptions>);
-  private readonly data = inject<PrintOptionsData>(MAT_DIALOG_DATA);
+  protected readonly data = inject<PrintOptionsData>(MAT_DIALOG_DATA);
 
-  protected readonly sections = SECTIONS;
-  protected readonly dateLabel = formatDate(this.data.date);
-
-  private readonly selected = signal<ReadonlySet<PrintSection>>(new Set(this.data.sections));
+  private readonly selected = signal<ReadonlySet<string>>(new Set(this.data.selected));
   protected readonly chosen = computed(() =>
-    SECTIONS.filter((s) => this.selected().has(s.key)).map((s) => s.key),
+    this.data.choices.filter((s) => this.selected().has(s.key)).map((s) => s.key),
   );
 
-  protected isChecked(key: PrintSection): boolean {
+  protected isChecked(key: string): boolean {
     return this.selected().has(key);
   }
 
-  protected isEmpty(key: PrintSection): boolean {
-    return this.data.emptySections.includes(key);
+  protected isEmpty(key: string): boolean {
+    return this.data.emptyKeys.includes(key);
   }
 
-  protected toggle(key: PrintSection, checked: boolean): void {
+  protected toggle(key: string, checked: boolean): void {
     this.selected.update((prev) => {
       const next = new Set(prev);
       if (checked) next.add(key);
@@ -143,6 +114,6 @@ export class PrintOptionsDialog {
 
   protected confirm(): void {
     // Return sections in the canonical order, not the order they were ticked.
-    this.dialogRef.close({ sections: this.chosen(), date: this.data.date });
+    this.dialogRef.close({ sections: this.chosen() });
   }
 }
