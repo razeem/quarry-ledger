@@ -8,25 +8,21 @@ package name, IndexedDB `quarry-ledger-db`, transfer marker `QLD1:`). The custom
 appears nowhere — not in the spec, the source workbook filename, or the prototype. Keep it
 that way; refer to the business as "the business" or "the quarry".
 
-**Status: Phase 1 complete.** All four tabs are live, seeded from `data/*.json` on first
-run, fully offline, verified against `data/golden-totals.json` by both unit and e2e tests.
+> Sections below describe **what is true now**, not when it changed — git history covers
+> that. Keep it that way: file a new fact under the capability it belongs to rather than
+> appending a dated block.
+
+## Status
+
+**Phase 1 is complete.** The daily tabs are live, seeded from `data/*.json` on first run,
+fully offline, and verified against `data/golden-totals.json` by both unit and e2e tests.
 Phase 2 (Supabase sync) is next — see WORK_PLAN.md §5.
 
-**Multi-account books + the party ledger (prototype, awaiting client feedback).** The app
-now hosts multiple self-contained **accounts ("books")**: the original Daily Ledger plus
-any number of **party ledgers** (modelled on the business's second workbook — per-party
-rates, a with/without-rent flag per load, vehicle-owner rent payables, and multi-way
-profit splits). Each book has its own collections, config, tabs and reports; the sidebar
-switcher swaps the whole workspace. See "Accounts and the party ledger" below.
-
-**Client-feedback round (2026-08).** Books are renameable everywhere (sidebar pencil +
-each book's Settings/Setup page — built-ins included, id never changes). Both entry
-tabs are spreadsheet-style sheets sharing `src/styles/_sheet.scss`, with per-row inline
-edit/delete (always undo-able) and **staged drafts** (see "Entry drafts and sync").
-Both books have a flat, filterable, paginated Ledger page (party books gained a fifth
-tab for it), and the party book prints (Reports + Statements) through the same shared
-print dialog/CSS as the daily one. Collapsing the sidebar now genuinely widens every
-page (`autosize` + `.app-shell--rail` cap raise).
+**Multi-account books are a prototype awaiting client sign-off.** The app hosts several
+self-contained **accounts ("books")**: the original Daily Ledger plus any number of
+**party ledgers** (modelled on the business's second workbook). Both book types share the
+same entry-sheet, ledger-page and printing machinery; the sidebar switcher swaps the whole
+workspace.
 
 ## Non-negotiables
 
@@ -41,7 +37,7 @@ page (`autosize` + `.app-shell--rail` cap raise).
 - Row `id` is immutable — it is the merge key for cross-device import. Never
   regenerate ids on edit.
 - Don't normalise vehicle numbers or crusher names; they are free-text business keys.
-- **Reuse before rebuild.** The app will keep growing (client iterates feature by
+- **Reuse before rebuild.** The app will keep growing (the client iterates feature by
   feature), so every new feature must first look for an existing primitive, helper or
   pattern to reuse or extend — `src/app/shared/` (paginator, undo-delete, paging,
   print dialog/flow, option-filter, account-name dialog), `src/styles/_sheet.scss`,
@@ -53,7 +49,63 @@ page (`autosize` + `.app-shell--rail` cap raise).
   only untouched cells re-populate. Encoded via the `overridden` sets in the entry
   rows and the baseline comparison in `draftRatePatch` for inline draft edits.
 
-## Accounts and the party ledger
+## Stack
+
+Angular 22 (standalone, **zoneless**, signals, `@if`/`@for`, `inject()`, `OnPush`
+everywhere, no NgModules, no `.component`/`.service` filename suffixes) · Angular Material 3
+only where warranted, with its `--mat-sys-*` tokens bridged onto the app's own design
+tokens · **Tailwind v4 utilities are the default styling method** — reach for them in the
+template first; a new feature should ideally ship with no `.scss` · IndexedDB via `idb`
+behind `StorageService` · Vitest for pure logic, Playwright (`data-testid` selectors only)
+for flows · Node 24.18.0 (`.nvmrc`).
+
+Scaffolded from the `angular-pwa-starter` skill. WORK_PLAN.md §4 suggests React; §4 also
+permits another stack provided the domain layer and acceptance criteria stand unchanged —
+they do.
+
+## Layering
+
+```
+src/domain/            pure types + calc + summaries + reports + merge + formatting.
+                       No framework, no I/O, no Angular imports. 100% tested.
+src/domain/party/      the party-ledger domain, same purity rules: types, round0/
+                       sumRounded calc, prefill, statements/reports, merge.
+src/app/core/ledger/   LedgerStore + PartyLedgerStore (the persistence facades) +
+                       LedgerTransfer / PartyLedgerTransfer (consolidated xlsx/json;
+                       the party Profit Split cell is `Name:₹/t; …` text, and cell
+                       coercion trims EDGE whitespace only — internal quirks survive).
+src/app/core/accounts/ AccountsStore — the book registry + per-account key scheme.
+src/app/core/          storage (IndexedDB), preferences, cross-device transfer (code/QR).
+src/app/shared/ui/     presentational primitives (page-header, section-card, stat-tile,
+                       paginator) + filterOptions for the type-ahead pickers.
+src/app/shared/ledger/ pageOf() paging helper + deleteRowWithUndo (id-preserving undo).
+src/app/shared/print/  the generalized print-options dialog + handoffToPrint()/printStamp().
+src/app/shared/accounts/ account-name-dialog (create + rename prompts).
+src/app/features/      one folder per tab set: entry, ledger, reports, settings (daily);
+                       party/ (entry, ledger, statements, reports, setup).
+src/styles/_sheet.scss the spreadsheet-grid styles both entry sheets share (global).
+```
+
+- UI never computes business values itself and never touches IndexedDB directly. It reads
+  `src/domain` functions and injects `LedgerStore`.
+- **`LedgerStore` is the only Phase-2 seam.** Everything persisted goes through it; swapping
+  its internals for Supabase sync must need no UI or domain change.
+- `data/` is the single source of truth for seed + fixtures; import it via the `@data/*`
+  path alias rather than copying files into `src/`. The seed modules are dynamically
+  imported so they stay out of the initial bundle.
+- `PILLARS` / `PARTY_PILLARS` in `src/app/app.routes.ts` drive both the sidebar and the
+  routes — the shell renders the set matching the active account's type. Add a tab there
+  plus a matching lazy `loadComponent`. Multi-segment pillar paths must bind as
+  `[routerLink]="'/' + pillar.path"` — the array form encodes the `/` and 404s.
+- The sidenav is `autosize` so collapsing it to the rail re-measures the content, and
+  `.app-shell--rail` raises `--app-page-max` by the reclaimed 182px. Collapsing therefore
+  widens every page, not just the full-bleed (`.app-page--wide`) ones.
+- New persisted collection? Register its key + version in **both** `COLLECTION_VERSIONS`
+  (`ledger-store.ts`, or `PARTY_COLLECTION_VERSIONS` in `party-ledger-store.ts`) and
+  `KNOWN_COLLECTIONS` (`transfer.model.ts`, by base name), or it will not round-trip
+  through a transfer.
+
+## Accounts and books
 
 - `AccountsStore` (`src/app/core/accounts/`) holds the book registry + active book. Two
   built-ins always exist: `default` (type `daily`) and `party-sample` (type `party`,
@@ -64,9 +116,20 @@ page (`autosize` + `.app-shell--rail` cap raise).
   `acc:<accountId>:<collection>`. `KNOWN_COLLECTIONS` registers **base** names; the
   transfer summary strips the prefix before classifying, so whole-DB transfers carry
   every book.
+- **Any book can be renamed**, built-ins included — the pencil beside each book in the
+  sidebar switcher, or the "This book" card on that book's Settings (daily) / Setup
+  (party) page. Only the label changes: the id is the key scheme's root and is immutable,
+  so renaming never touches stored data. `withBuiltIns` preserves a renamed built-in's
+  label across reloads.
 - `PartyLedgerStore` is the party twin of `LedgerStore` — same non-negotiables: it is
   the only persistence seam, every mutator is async-durable, wait on `initialised()`
   (never `ready()`), and rate/split edits never mutate saved rows.
+
+## The party ledger
+
+Per-party rates, a with/without-rent flag per load, vehicle-owner rent payables, and
+multi-way profit splits — the business's second workbook, computed live.
+
 - **The party engine's rounding contract differs from the daily one.** `round0` is Excel
   `ROUND(x, 0)` (nearest rupee, half away from zero, epsilon-nudged — `290.51 × 850` is
   a true `.5` tie). Quarry payable rounds **per row**; receivable, owner rent and profit
@@ -87,7 +150,33 @@ page (`autosize` + `.app-shell--rail` cap raise).
   preserves a real spelling drift (`Ratheeesh 8334` on rows vs ` Ratheesh 8334` in the
   master) so the rent report demonstrably surfaces it rather than papering over it.
 
-## Entry drafts and sync
+## The entry sheets
+
+Both books enter loads through a spreadsheet-style sheet sharing `src/styles/_sheet.scss`:
+the header pins to the top, the entry row pins to the bottom, the date's saved rows stack
+above it, and the grid scrolls sideways inside its own box (the page never does, even at
+375px). Optimised for tablet and laptop, where this data gets entered.
+
+- A rate cell is badged `auto` (from the chart/setup), `saved` (an existing row's
+  snapshot) or `edited` (typed over). Saved rows highlight any rate that no longer matches
+  the chart — which means "differs from today's chart", since a row does not record
+  whether it was typed over or the chart changed later.
+- **Draft rows are live cells** — every field edits in place (no pencil), each change
+  persisting through `updateDraft`. A crusher/party typed into a draft re-resolves the
+  chart/setup for its untouched rate cells only (`draftRatePatch`). Synced ledger rows
+  stay read-only on the sheet; their pencil loads the entry row deliberately.
+- Deleting any row (draft or synced) goes through `deleteRowWithUndo`, so every delete is
+  undoable and the undo restores the ORIGINAL id.
+- The crusher/party/vehicle pickers are `mat-autocomplete` + the shared
+  `filterOptions` (`src/app/shared/ui/option-filter.ts`), NOT `<datalist>`: a chosen
+  value must reopen with the FULL option list, which datalists cannot do. In e2e,
+  press Escape after filling a picker before clicking elsewhere — the open panel can
+  otherwise intercept the click (`setCrusher`/`setParty` already do this).
+- Numeric columns are pinned to a fixed width and only the free-text ones carry
+  `flex: true`, so surplus width on a wide screen goes where it is useful instead of
+  bloating every cell.
+
+## Drafts and sync
 
 The client receives partial data from the quarry first (no crusher / no party), so both
 entry sheets stage new rows as **drafts** — durable immediately (collections
@@ -96,16 +185,7 @@ statements, reports and goldens until "Save N to ledger" syncs them.
 
 - A draft only needs `qty > 0`; `isDraftComplete` / `isPartyDraftComplete` decide what
   sync may move across (crusher/party present). Incomplete drafts stay staged, flagged
-  on the sheet, and are completed later via inline edit.
-- **Draft rows are live cells** — every field edits in place (no pencil), each change
-  persisting through `updateDraft`. A crusher/party typed into a draft re-resolves the
-  chart/setup for its untouched rate cells only (`draftRatePatch`). Synced ledger rows
-  stay read-only on the sheet; their pencil loads the entry row deliberately.
-- The crusher/party/vehicle pickers are `mat-autocomplete` + the shared
-  `filterOptions` (`src/app/shared/ui/option-filter.ts`), NOT `<datalist>`: a chosen
-  value must reopen with the FULL option list, which datalists cannot do. In e2e,
-  press Escape after filling a picker before clicking elsewhere — the open panel can
-  otherwise intercept the click (`setCrusher`/`setParty` already do this).
+  on the sheet, and are completed later by editing them in place.
 - **Sync copies values verbatim and keeps each draft's id** — the id is minted at draft
   creation and is already the cross-device merge key, so double-syncing (or syncing from
   two devices) dedupes instead of duplicating. Never recompute rates at sync time.
@@ -118,7 +198,35 @@ statements, reports and goldens until "Save N to ledger" syncs them.
 - In e2e, remember: after `saveEntry`/`savePartyEntry` the row is a DRAFT — call
   `syncDrafts`/`syncPartyDrafts` (helpers.ts) before asserting on Ledger/report counts.
 
-## `data/` is sample data, and only the labels are sample
+## Ledger pages, reports and printing
+
+- Each book has a **Ledger page**: one flat table of every synced row, newest date first,
+  25 rows/page via the shared `pageOf` + `<app-paginator>`. Filters are date range plus
+  the book's own keys (daily: crusher, pass type, vehicle substring; party: party, owner,
+  vehicle substring, rent mode), applied by the pure `filterLedgerRows` /
+  `filterPartyRows`. **The totals line always covers the whole filtered set**, never just
+  the visible page, and changing any filter resets to page 1.
+- Free-text filters match the RAW stored string (substring for vehicles, exact for
+  crusher/party/owner). No trimming or case-folding — that is what keeps `KL00T5450` and
+  `KL 00 T 5450` distinguishable, and what makes the owner spelling drift visible.
+- **Printing is shared.** `src/app/shared/print/` holds the section-picker dialog (generic
+  over its section keys) and `handoffToPrint()`; the `@media print` CSS in `styles.scss`
+  is global. A page prints by rendering a hidden `.report-print` block and marking its
+  interactive UI `.no-print`. Daily Reports, party Reports and party Statements all use
+  this same path — add a printable page by supplying `choices` and a print block, not by
+  writing new print plumbing.
+
+## Rates and the chart
+
+- The rate chart autopopulates **all four** rate cells — quary, crusher, rent and comm.
+  `comm` is a per-entry column (v2) because several crushers genuinely run at ₹0; when an
+  entry has no `comm` (a v1 chart or an older import) it falls back to the global
+  `discountRatePerTon`. It is only a default: `Riverside Crusher Pass` and `Hillview Granites Pass` have
+  historically used both ₹0 and ₹20, so the row's own snapshot always wins.
+- The `item` column is hidden (one commodity these days) and every row saves as `Rock`.
+  The field stays on `LedgerRow`, so restoring the column is a UI-only change.
+
+## Seed data — sample labels, verified numbers
 
 The seed is what a first-time user sees, so it carries **no real crusher names and no
 real vehicle registrations**. Those labels were relabelled to plainly-fictional
@@ -155,59 +263,6 @@ These are real properties of the seed data, encoded in the golden totals. Do not
   ₹1490 where Excel bills ₹1500. 129 realistic qty/rate pairs hit this. Keep the epsilon
   nudge in `round10`.
 
-## Stack
-
-Angular 22 (standalone, **zoneless**, signals, `@if`/`@for`, `inject()`, `OnPush`
-everywhere, no NgModules, no `.component`/`.service` filename suffixes) · Angular Material 3
-only where warranted, with its `--mat-sys-*` tokens bridged onto the app's own design
-tokens · **Tailwind v4 utilities are the default styling method** — reach for them in the
-template first; a new feature should ideally ship with no `.scss` · IndexedDB via `idb`
-behind `StorageService` · Vitest for pure logic, Playwright (`data-testid` selectors only)
-for flows · Node 24.18.0 (`.nvmrc`).
-
-Scaffolded from the `angular-pwa-starter` skill. WORK_PLAN.md §4 suggests React; §4 also
-permits another stack provided the domain layer and acceptance criteria stand unchanged —
-they do.
-
-## Layering
-
-```
-src/domain/            pure types + calc + summaries + reports + merge + formatting.
-                       No framework, no I/O, no Angular imports. 100% tested.
-src/domain/party/      the party-ledger domain, same purity rules: types, round0/
-                       sumRounded calc, prefill, statements/reports, merge.
-src/app/core/ledger/   LedgerStore + PartyLedgerStore (the persistence facades) +
-                       LedgerTransfer / PartyLedgerTransfer (consolidated xlsx/json;
-                       the party Profit Split cell is `Name:₹/t; …` text, and cell
-                       coercion trims EDGE whitespace only — internal quirks survive).
-src/app/core/accounts/ AccountsStore — the book registry + per-account key scheme.
-src/app/core/          storage (IndexedDB), preferences, cross-device transfer (code/QR).
-src/app/shared/ui/     presentational primitives (page-header, section-card, stat-tile,
-                       paginator).
-src/app/shared/ledger/ pageOf() paging helper + deleteRowWithUndo (id-preserving undo).
-src/app/shared/print/  the generalized print-options dialog + handoffToPrint()/printStamp().
-src/app/shared/accounts/ account-name-dialog (create + rename prompts).
-src/app/features/      one folder per tab set: entry, ledger, reports, settings (daily);
-                       party/ (entry, ledger, statements, reports, setup).
-src/styles/_sheet.scss the spreadsheet-grid styles both entry sheets share (global).
-```
-
-- UI never computes business values itself and never touches IndexedDB directly. It reads
-  `src/domain` functions and injects `LedgerStore`.
-- **`LedgerStore` is the only Phase-2 seam.** Everything persisted goes through it; swapping
-  its internals for Supabase sync must need no UI or domain change.
-- `data/` is the single source of truth for seed + fixtures; import it via the `@data/*`
-  path alias rather than copying files into `src/`. The seed modules are dynamically
-  imported so they stay out of the initial bundle.
-- `PILLARS` / `PARTY_PILLARS` in `src/app/app.routes.ts` drive both the sidebar and the
-  routes — the shell renders the set matching the active account's type. Add a tab there
-  plus a matching lazy `loadComponent`. Multi-segment pillar paths must bind as
-  `[routerLink]="'/' + pillar.path"` — the array form encodes the `/` and 404s.
-- New persisted collection? Register its key + version in **both** `COLLECTION_VERSIONS`
-  (`ledger-store.ts`, or `PARTY_COLLECTION_VERSIONS` in `party-ledger-store.ts`) and
-  `KNOWN_COLLECTIONS` (`transfer.model.ts`, by base name), or it will not round-trip
-  through a transfer.
-
 ## Traps worth remembering
 
 Each of these was a real bug caught by the test suite, not a hypothetical.
@@ -219,10 +274,10 @@ Each of these was a real bug caught by the test suite, not a hypothetical.
   "hydrated *and* seeded".
 - **Every write must be durable before you confirm it.** `StorageService` debounces writes
   250 ms; entering a load and immediately navigating (or Android killing a backgrounded
-  PWA) would drop it. So **all** `LedgerStore` mutators — rows *and* reference data *and*
-  the seed itself — are `async` and resolve only once the write has landed. Always await
-  them before showing a toast, resetting a form, or navigating. Losing entered data is the
-  exact failure this app exists to prevent.
+  PWA) would drop it. So **all** `LedgerStore` mutators — rows *and* drafts *and* reference
+  data *and* the seed itself — are `async` and resolve only once the write has landed.
+  Always await them before showing a toast, resetting a form, or navigating. Losing entered
+  data is the exact failure this app exists to prevent.
   - The seed flushes too: without it, navigating within 250 ms of a first load lost the
     `seeded` flag, re-ran the seed, and overwrote a rate the user had just edited.
 - **An async default must not clobber a user action.** The Ledger's default date range is
@@ -248,20 +303,6 @@ Each of these was a real bug caught by the test suite, not a hypothetical.
   invisible on a fast machine. `entry-sheet.spec.ts` guards the invariant that matters —
   a row is never saved with zero rates — and was verified to fail with the same
   `Expected: "" Received: "9"` CI produced before the fix.
-
-## Rates and the chart
-
-- The rate chart autopopulates **all four** rate cells — quary, crusher, rent and comm.
-  `comm` is a per-entry column (v2) because several crushers genuinely run at ₹0; when an
-  entry has no `comm` (a v1 chart or an older import) it falls back to the global
-  `discountRatePerTon`. It is only a default: `Riverside Crusher Pass` and `Hillview Granites Pass` have
-  historically used both ₹0 and ₹20, so the row's own snapshot always wins.
-- On the entry sheet, a rate cell is badged `auto` (from the chart), `saved` (an existing
-  row's snapshot) or `edited` (typed over). Saved rows above the entry row highlight any
-  rate that no longer matches the chart — which means "differs from today's chart", since
-  a row does not record whether it was typed over or the chart changed later.
-- The `item` column is hidden (one commodity these days) and every row saves as `Rock`.
-  The field stays on `LedgerRow`, so restoring the column is a UI-only change.
 
 ## Commands
 
