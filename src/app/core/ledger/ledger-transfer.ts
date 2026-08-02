@@ -8,6 +8,10 @@ import type {
   Vehicle,
 } from '../../../domain/types';
 import { DEFAULT_SETTINGS } from '../../../domain/types';
+import { computeRow } from '../../../domain/calc';
+import { summarize } from '../../../domain/summaries';
+import { crusherReport, monthlyReport } from '../../../domain/reports';
+import { colRange, criterion, formulaCell, overRows } from './workbook-formulas';
 import type { LedgerSnapshot } from './ledger-store';
 
 /**
@@ -23,8 +27,17 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const SHEET_LEDGER = 'Daily Ledger';
 const SHEET_RATES = 'Rate Chart';
 const SHEET_VEHICLES = 'Vehicles';
+const SHEET_SUMMARY = 'Summary';
+const SHEET_BY_CRUSHER = 'By Crusher';
+const SHEET_BY_MONTH = 'By Month';
 
-/** Column order of the Daily Ledger sheet. `id` comes first so it is never lost. */
+/**
+ * Column order of the Daily Ledger sheet. `id` comes first so it is never lost.
+ *
+ * Columns A–K are the stored row and stay **literal** — they are what
+ * `parseXlsx` reads back, so a formula here would break the round trip. The
+ * derived columns L–R are appended after them as live formulas.
+ */
 const LEDGER_COLUMNS = [
   { header: 'id', key: 'id', width: 16 },
   { header: 'Date', key: 'date', width: 12 },
@@ -37,7 +50,35 @@ const LEDGER_COLUMNS = [
   { header: 'Rent Rate', key: 'rentRate', width: 11 },
   { header: 'Comm Rate', key: 'commRate', width: 11 },
   { header: 'Vehicle', key: 'vehicle', width: 18 },
+  // --- derived, written as formulas over the columns above -------------------
+  { header: 'Crusher Amount', key: 'crusherAmount', width: 15 },
+  { header: 'Quary Amount', key: 'quaryAmount', width: 14 },
+  { header: 'Vehicle Ton', key: 'vehicleTon', width: 12 },
+  { header: 'Vehicle Rent', key: 'vehicleRent', width: 13 },
+  { header: 'Profit', key: 'profit', width: 13 },
+  { header: 'Comm Qty', key: 'discountQty', width: 11 },
+  { header: 'Commission', key: 'discount', width: 12 },
 ] as const;
+
+/** Column letters of the Daily Ledger sheet, by meaning. */
+const L = {
+  id: 'A',
+  date: 'B',
+  crusher: 'D',
+  passType: 'E',
+  qty: 'F',
+  quaryRate: 'G',
+  crusherRate: 'H',
+  rentRate: 'I',
+  commRate: 'J',
+  crusherAmount: 'L',
+  quaryAmount: 'M',
+  vehicleTon: 'N',
+  vehicleRent: 'O',
+  profit: 'P',
+  discountQty: 'Q',
+  discount: 'R',
+} as const;
 
 interface ExcelJsModule {
   Workbook: new () => Workbook;
@@ -111,21 +152,59 @@ function passType(value: unknown): PassType | null {
 export class LedgerTransfer {
   // --- Export -------------------------------------------------------------
 
-  /** Build and download a three-sheet workbook. Returns the blob for tests. */
+  /**
+   * Build and download the working workbook: the ledger with live derived
+   * columns, its reference sheets, and formula-driven summaries.
+   *
+   * Tombstoned rows are left out — a deleted load is not part of the accounts.
+   * Returns the blob for tests.
+   */
   async exportXlsx(snapshot: LedgerSnapshot, fileName = defaultName('xlsx')): Promise<Blob> {
     const { Workbook } = await loadExcelJs();
     const workbook = new Workbook();
     workbook.creator = 'Quarry Ledger';
 
+    const rows = snapshot.rows.filter((row) => !row.deleted);
+    const last = rows.length + 1; // 1-based, row 1 is the header
+
     const ledger = workbook.addWorksheet(SHEET_LEDGER);
     ledger.columns = LEDGER_COLUMNS.map((c) => ({ ...c }));
-    for (const row of snapshot.rows) {
+    rows.forEach((row, index) => {
+      const r = index + 2;
+      const c = computeRow(row);
       ledger.addRow({
         ...row,
         // A null passType must round-trip as an empty cell, not the text 'null'.
         passType: row.passType ?? '',
+        // Mirrors `computeRow` cell for cell — see src/domain/calc.ts.
+        crusherAmount: formulaCell(`${L.qty}${r}*${L.crusherRate}${r}`, c.crusherAmount),
+        quaryAmount: formulaCell(
+          `ROUND(${L.qty}${r}*${L.quaryRate}${r},-1)`,
+          c.quaryAmount,
+        ),
+        vehicleTon: formulaCell(
+          `IF(${L.rentRate}${r}>0,${L.qty}${r},0)`,
+          c.vehicleTon,
+        ),
+        vehicleRent: formulaCell(`${L.vehicleTon}${r}*${L.rentRate}${r}`, c.vehicleRent),
+        profit: formulaCell(
+          `${L.crusherAmount}${r}-${L.quaryAmount}${r}-${L.vehicleRent}${r}`,
+          c.profit,
+        ),
+        discountQty: formulaCell(
+          `IF(${L.commRate}${r}>0,${L.qty}${r},0)`,
+          c.discountQty,
+        ),
+        discount: formulaCell(
+          `IF(${L.commRate}${r}>0,${L.qty}${r}*${L.commRate}${r},0)`,
+          c.discount,
+        ),
       });
-    }
+    });
+
+    this.addSummarySheet(workbook, rows, last);
+    this.addCrusherSheet(workbook, rows, last);
+    this.addMonthSheet(workbook, rows, last);
 
     const rates = workbook.addWorksheet(SHEET_RATES);
     rates.columns = [
@@ -145,7 +224,7 @@ export class LedgerTransfer {
     ];
     for (const vehicle of snapshot.vehicles) vehicles.addRow(vehicle);
 
-    for (const sheet of [ledger, rates, vehicles]) {
+    for (const sheet of workbook.worksheets) {
       sheet.getRow(1).font = { bold: true };
       sheet.views = [{ state: 'frozen', ySplit: 1 }];
     }
@@ -154,6 +233,128 @@ export class LedgerTransfer {
     const blob = new Blob([buffer], { type: XLSX_MIME });
     download(blob, fileName);
     return blob;
+  }
+
+  /**
+   * All-time totals, every figure a live formula over the ledger sheet.
+   *
+   * The Pass / WO Pass splits use `SUMIF` on the pass-type column, which
+   * reproduces a real property of the data rather than hiding it: a row whose
+   * pass type is blank counts towards qty and profit but towards neither split,
+   * so `Pass Qty + WO Pass Qty` is legitimately less than `Qty`. The note row at
+   * the bottom says so, because it otherwise reads as a broken sum.
+   */
+  private addSummarySheet(workbook: Workbook, rows: readonly LedgerRow[], last: number): void {
+    const total = summarize(rows);
+    const sheet = workbook.addWorksheet(SHEET_SUMMARY);
+    sheet.columns = [
+      { header: 'Figure', key: 'label', width: 24 },
+      { header: 'Value', key: 'value', width: 18 },
+    ];
+
+    const sum = (column: string, result: number) =>
+      overRows(rows.length, () =>
+        formulaCell(`SUM(${colRange(SHEET_LEDGER, column, 2, last)})`, result),
+      );
+    const sumIf = (pass: string, column: string, result: number) =>
+      overRows(rows.length, () =>
+        formulaCell(
+          `SUMIF(${colRange(SHEET_LEDGER, L.passType, 2, last)},${criterion(pass)},` +
+            `${colRange(SHEET_LEDGER, column, 2, last)})`,
+          result,
+        ),
+      );
+
+    sheet.addRow({
+      label: 'Loads',
+      value: overRows(rows.length, () =>
+        formulaCell(`COUNTA(${colRange(SHEET_LEDGER, L.id, 2, last)})`, total.loads),
+      ),
+    });
+    sheet.addRow({ label: 'Qty (t)', value: sum(L.qty, total.qty) });
+    sheet.addRow({ label: 'Crusher Amount', value: sum(L.crusherAmount, total.crusherAmount) });
+    sheet.addRow({ label: 'Quary Amount', value: sum(L.quaryAmount, total.quaryAmount) });
+    sheet.addRow({ label: 'Vehicle Rent', value: sum(L.vehicleRent, total.vehicleRent) });
+    sheet.addRow({ label: 'Profit', value: sum(L.profit, total.profit) });
+    sheet.addRow({ label: 'Pass Qty (t)', value: sumIf('Pass', L.qty, total.passQty) });
+    sheet.addRow({ label: 'Pass Profit', value: sumIf('Pass', L.profit, total.passProfit) });
+    sheet.addRow({ label: 'WO Pass Qty (t)', value: sumIf('WO Pass', L.qty, total.woQty) });
+    sheet.addRow({ label: 'WO Pass Profit', value: sumIf('WO Pass', L.profit, total.woProfit) });
+    sheet.addRow({ label: 'Commission Qty (t)', value: sum(L.discountQty, total.discQty) });
+    sheet.addRow({ label: 'Commission', value: sum(L.discount, total.discount) });
+    sheet.addRow({});
+    sheet.addRow({
+      label:
+        'Note: loads with no pass type count towards Qty and Profit but towards ' +
+        'neither split, so the two splits need not add up to the totals above.',
+    });
+  }
+
+  /** All-time totals per crusher, most profitable first — live `SUMIF` formulas. */
+  private addCrusherSheet(workbook: Workbook, rows: readonly LedgerRow[], last: number): void {
+    const sheet = workbook.addWorksheet(SHEET_BY_CRUSHER);
+    sheet.columns = [
+      { header: 'Crusher', key: 'crusher', width: 26 },
+      { header: 'Loads', key: 'loads', width: 9 },
+      { header: 'Qty (t)', key: 'qty', width: 11 },
+      { header: 'Crusher Amount', key: 'crusherAmount', width: 15 },
+      { header: 'Quary Amount', key: 'quaryAmount', width: 14 },
+      { header: 'Vehicle Rent', key: 'vehicleRent', width: 13 },
+      { header: 'Profit', key: 'profit', width: 13 },
+    ];
+
+    const key = colRange(SHEET_LEDGER, L.crusher, 2, last);
+    crusherReport(rows).forEach((line, index) => {
+      const r = index + 2;
+      const sumIf = (column: string, result: number) =>
+        formulaCell(`SUMIF(${key},$A${r},${colRange(SHEET_LEDGER, column, 2, last)})`, result);
+      sheet.addRow({
+        crusher: line.crusher,
+        loads: formulaCell(`COUNTIF(${key},$A${r})`, line.loads),
+        qty: sumIf(L.qty, line.qty),
+        crusherAmount: sumIf(L.crusherAmount, line.crusherAmount),
+        quaryAmount: sumIf(L.quaryAmount, line.quaryAmount),
+        vehicleRent: sumIf(L.vehicleRent, line.vehicleRent),
+        profit: sumIf(L.profit, line.profit),
+      });
+    });
+  }
+
+  /**
+   * Per-month totals, most recent first.
+   *
+   * Dates are written as ISO text, so a month matches with the `"2025-11*"`
+   * wildcard rather than a date-range comparison — which also means the formula
+   * keeps working if someone types a new date in by hand.
+   */
+  private addMonthSheet(workbook: Workbook, rows: readonly LedgerRow[], last: number): void {
+    const sheet = workbook.addWorksheet(SHEET_BY_MONTH);
+    sheet.columns = [
+      { header: 'Month', key: 'month', width: 12 },
+      { header: 'Loads', key: 'loads', width: 9 },
+      { header: 'Qty (t)', key: 'qty', width: 11 },
+      { header: 'Commission Qty (t)', key: 'discountQty', width: 17 },
+      { header: 'Commission', key: 'discount', width: 13 },
+      { header: 'Profit', key: 'profit', width: 13 },
+    ];
+
+    const key = colRange(SHEET_LEDGER, L.date, 2, last);
+    monthlyReport(rows).forEach((line, index) => {
+      const r = index + 2;
+      const sumIf = (column: string, result: number) =>
+        formulaCell(
+          `SUMIF(${key},$A${r}&"*",${colRange(SHEET_LEDGER, column, 2, last)})`,
+          result,
+        );
+      sheet.addRow({
+        month: line.month,
+        loads: formulaCell(`COUNTIF(${key},$A${r}&"*")`, line.loads),
+        qty: sumIf(L.qty, line.qty),
+        discountQty: sumIf(L.discountQty, line.discountQty),
+        discount: sumIf(L.discount, line.discount),
+        profit: sumIf(L.profit, line.profit),
+      });
+    });
   }
 
   /** Download an exact JSON backup (the restore path reproduces it verbatim). */

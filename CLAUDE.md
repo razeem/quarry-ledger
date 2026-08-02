@@ -249,6 +249,39 @@ absent `deleted` reads as live.
   this same path — add a printable page by supplying `choices` and a print block, not by
   writing new print plumbing.
 
+## The continuity workbook (xlsx export)
+
+The `.xlsx` export is not a snapshot — it is a **workbook the business can keep working
+in** if the app goes away. They already run their accounting in Excel, so this is the
+business-continuity plan, and it matters more than it looks: on the free Supabase tier
+there are no server backups, and a mistaken delete now replicates to every device by
+design. A monthly export kept off the devices is the restore point.
+
+- **Stored columns stay literal; derived columns are formulas.** Daily A–K and party A–L
+  are what `parseXlsx` reads back, so a formula there would break the merge round trip —
+  which is asserted. The derived columns are appended after them.
+- **Every formula ships with the value our engine computed** (`{ formula, result }` via
+  `formulaCell`). Formula-only cells render blank in Google Sheets, Numbers and Excel
+  mobile until something forces a recalculation, which reads as a broken file.
+- **exceljs drops a cached result of exactly `0`** — verified, not inferred. Such a cell
+  shows blank in a non-recalculating viewer. Left alone deliberately: writing a literal
+  `0` would restore the cache but kill the formula, and a without-rent row must still
+  recalculate if someone flips its With Rent flag in Excel.
+- Formulas mirror `calc.ts` / `party/calc.ts` cell for cell, `ROUND(x,-1)` and
+  `ROUND(x,0)` included — which is where the golden contract came from in the first place.
+  `workbook-continuity.spec.ts` asserts the cached values reproduce **both** golden files,
+  closing the loop workbook → engine → workbook.
+- **The party sheets' layout IS its rounding contract.** Receivable, owner rent and profit
+  round on the aggregate (`sumRounded`), so each (key, rate) group gets its own line
+  carrying one `ROUND(SUMIFS(…) * rate, 0)` — exactly what the source workbook did. Never
+  collapse those sheets into a single per-party `SUM`; that would round differently.
+  Quarry payable rounds per row, so it is an ordinary column sum.
+- The profit split is compact text on the row (`Owner:40; Adjust:20`), which no formula
+  can read, so `Profit Share Lines` flattens it to one row per (load × share). Every
+  profit figure in the workbook sums from there.
+- Tombstoned rows are excluded — a deleted load is not part of the accounts. The JSON
+  backup still carries them, because that is the path deletes travel on.
+
 ## Rates and the chart
 
 - The rate chart autopopulates **all four** rate cells — quary, crusher, rent and comm.
