@@ -19,6 +19,15 @@ rates, a with/without-rent flag per load, vehicle-owner rent payables, and multi
 profit splits). Each book has its own collections, config, tabs and reports; the sidebar
 switcher swaps the whole workspace. See "Accounts and the party ledger" below.
 
+**Client-feedback round (2026-08).** Books are renameable everywhere (sidebar pencil +
+each book's Settings/Setup page — built-ins included, id never changes). Both entry
+tabs are spreadsheet-style sheets sharing `src/styles/_sheet.scss`, with per-row inline
+edit/delete (always undo-able) and **staged drafts** (see "Entry drafts and sync").
+Both books have a flat, filterable, paginated Ledger page (party books gained a fifth
+tab for it), and the party book prints (Reports + Statements) through the same shared
+print dialog/CSS as the daily one. Collapsing the sidebar now genuinely widens every
+page (`autosize` + `.app-shell--rail` cap raise).
+
 ## Non-negotiables
 
 - **The Daily Ledger row is the single source of truth.** Reports are pure functions
@@ -32,6 +41,17 @@ switcher swaps the whole workspace. See "Accounts and the party ledger" below.
 - Row `id` is immutable — it is the merge key for cross-device import. Never
   regenerate ids on edit.
 - Don't normalise vehicle numbers or crusher names; they are free-text business keys.
+- **Reuse before rebuild.** The app will keep growing (client iterates feature by
+  feature), so every new feature must first look for an existing primitive, helper or
+  pattern to reuse or extend — `src/app/shared/` (paginator, undo-delete, paging,
+  print dialog/flow, option-filter, account-name dialog), `src/styles/_sheet.scss`,
+  and the domain functions. Duplicating a behaviour that exists elsewhere is a bug:
+  the two copies will drift, and shared lazy chunks are also what keeps the bundle
+  small. Extract on the second use, not the third.
+- **Edited always beats autofill.** A cell the user typed keeps their value no matter
+  what re-triggers autopopulation afterwards (changing crusher/party/pass/rent-mode);
+  only untouched cells re-populate. Encoded via the `overridden` sets in the entry
+  rows and the baseline comparison in `draftRatePatch` for inline draft edits.
 
 ## Accounts and the party ledger
 
@@ -66,6 +86,37 @@ switcher swaps the whole workspace. See "Accounts and the party ledger" below.
 - Owner names are free-text business keys like everything else — the seed deliberately
   preserves a real spelling drift (`Ratheeesh 8334` on rows vs ` Ratheesh 8334` in the
   master) so the rent report demonstrably surfaces it rather than papering over it.
+
+## Entry drafts and sync
+
+The client receives partial data from the quarry first (no crusher / no party), so both
+entry sheets stage new rows as **drafts** — durable immediately (collections
+`entry-drafts` / `party-entry-drafts`, per book), but invisible to the Ledger pages,
+statements, reports and goldens until "Save N to ledger" syncs them.
+
+- A draft only needs `qty > 0`; `isDraftComplete` / `isPartyDraftComplete` decide what
+  sync may move across (crusher/party present). Incomplete drafts stay staged, flagged
+  on the sheet, and are completed later via inline edit.
+- **Draft rows are live cells** — every field edits in place (no pencil), each change
+  persisting through `updateDraft`. A crusher/party typed into a draft re-resolves the
+  chart/setup for its untouched rate cells only (`draftRatePatch`). Synced ledger rows
+  stay read-only on the sheet; their pencil loads the entry row deliberately.
+- The crusher/party/vehicle pickers are `mat-autocomplete` + the shared
+  `filterOptions` (`src/app/shared/ui/option-filter.ts`), NOT `<datalist>`: a chosen
+  value must reopen with the FULL option list, which datalists cannot do. In e2e,
+  press Escape after filling a picker before clicking elsewhere — the open panel can
+  otherwise intercept the click (`setCrusher`/`setParty` already do this).
+- **Sync copies values verbatim and keeps each draft's id** — the id is minted at draft
+  creation and is already the cross-device merge key, so double-syncing (or syncing from
+  two devices) dedupes instead of duplicating. Never recompute rates at sync time.
+- Undo of any delete (row or draft) restores under the ORIGINAL id via
+  `mergeImport`/`restoreDraft` — `deleteRowWithUndo` in `src/app/shared/ledger/` is the
+  only delete path the UI uses.
+- Drafts ride every transfer path: registered in both version maps and
+  `KNOWN_COLLECTIONS`, included in `snapshot()`/`replaceAll()`/JSON backups. The xlsx
+  export stays ledger-only.
+- In e2e, remember: after `saveEntry`/`savePartyEntry` the row is a DRAFT — call
+  `syncDrafts`/`syncPartyDrafts` (helpers.ts) before asserting on Ledger/report counts.
 
 ## `data/` is sample data, and only the labels are sample
 
@@ -131,9 +182,14 @@ src/app/core/ledger/   LedgerStore + PartyLedgerStore (the persistence facades) 
                        coercion trims EDGE whitespace only — internal quirks survive).
 src/app/core/accounts/ AccountsStore — the book registry + per-account key scheme.
 src/app/core/          storage (IndexedDB), preferences, cross-device transfer (code/QR).
-src/app/shared/ui/     presentational primitives (page-header, section-card, stat-tile).
+src/app/shared/ui/     presentational primitives (page-header, section-card, stat-tile,
+                       paginator).
+src/app/shared/ledger/ pageOf() paging helper + deleteRowWithUndo (id-preserving undo).
+src/app/shared/print/  the generalized print-options dialog + handoffToPrint()/printStamp().
+src/app/shared/accounts/ account-name-dialog (create + rename prompts).
 src/app/features/      one folder per tab set: entry, ledger, reports, settings (daily);
-                       party/ (entry, statements, reports, setup + new-account dialog).
+                       party/ (entry, ledger, statements, reports, setup).
+src/styles/_sheet.scss the spreadsheet-grid styles both entry sheets share (global).
 ```
 
 - UI never computes business values itself and never touches IndexedDB directly. It reads

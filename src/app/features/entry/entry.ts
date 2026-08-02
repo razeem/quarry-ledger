@@ -14,9 +14,16 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PageHeader } from '../../shared/ui/page-header';
-import { LedgerStore, type LedgerRowDraft } from '../../core/ledger/ledger-store';
+import { filterOptions } from '../../shared/ui/option-filter';
+import {
+  isDraftComplete,
+  LedgerStore,
+  type LedgerRowDraft,
+} from '../../core/ledger/ledger-store';
+import { deleteRowWithUndo } from '../../shared/ledger/undo-delete';
 import { computeRow, type ComputedRow } from '../../../domain/calc';
 import { formatDate, formatInr, formatTons } from '../../../domain/format';
 import { ratePrefill } from '../../../domain/rates';
@@ -37,6 +44,12 @@ interface SheetColumn {
   label: string;
   width: number;
   group: ColumnGroup;
+  /**
+   * Absorbs the surplus when the sheet is wider than its columns. Without this
+   * the browser stretches EVERY column evenly, so the numeric cells balloon on
+   * a wide screen; flex columns are the free-text ones that can use the room.
+   */
+  flex?: boolean;
 }
 
 /**
@@ -53,20 +66,21 @@ interface SheetColumn {
  */
 const COLUMNS: readonly SheetColumn[] = [
   { key: 'date', label: 'Date', width: 126, group: 'input' },
-  { key: 'crusher', label: 'Crusher', width: 168, group: 'input' },
+  { key: 'crusher', label: 'Crusher', width: 168, group: 'input', flex: true },
   { key: 'passType', label: 'Pass', width: 96, group: 'input' },
   { key: 'qty', label: 'Qty (t)', width: 82, group: 'input' },
-  { key: 'quaryRate', label: 'Quary', width: 74, group: 'auto' },
-  { key: 'crusherRate', label: 'Crusher', width: 74, group: 'auto' },
-  { key: 'rentRate', label: 'Rent', width: 74, group: 'auto' },
-  { key: 'commRate', label: 'Comm', width: 74, group: 'auto' },
-  { key: 'vehicle', label: 'Vehicle', width: 138, group: 'input' },
+  { key: 'quaryRate', label: 'Quary', width: 86, group: 'auto' },
+  { key: 'crusherRate', label: 'Crusher', width: 86, group: 'auto' },
+  { key: 'rentRate', label: 'Rent', width: 86, group: 'auto' },
+  { key: 'commRate', label: 'Comm', width: 86, group: 'auto' },
+  { key: 'vehicle', label: 'Vehicle', width: 138, group: 'input', flex: true },
   { key: 'crusherAmount', label: 'Crusher Amt', width: 102, group: 'calc' },
   { key: 'quaryAmount', label: 'Quary Amt', width: 98, group: 'calc' },
   { key: 'vehicleTon', label: 'Veh Ton', width: 82, group: 'calc' },
   { key: 'vehicleRent', label: 'Veh Rent', width: 94, group: 'calc' },
   { key: 'profit', label: 'Profit', width: 94, group: 'calc' },
   { key: 'discount', label: 'Discount', width: 90, group: 'calc' },
+  { key: 'actions', label: '', width: 100, group: 'input' },
 ];
 
 const RATE_COLUMNS: readonly { field: RateField; label: string; testid: string }[] = [
@@ -94,6 +108,10 @@ interface SavedRowView {
   differs: Record<RateField, boolean>;
   /** False when the chart has no entry for this crusher + pass, so nothing to compare. */
   comparable: boolean;
+  /** 'draft' rows are staged on this sheet only; 'row' is in the base ledger. */
+  kind: 'row' | 'draft';
+  /** A draft still missing what it needs to sync (crusher / qty). */
+  incomplete: boolean;
 }
 
 /** Today as ISO 'YYYY-MM-DD' in local time (never a UTC-shifted day). */
@@ -123,9 +141,9 @@ function todayIso(): string {
 @Component({
   selector: 'app-entry',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, MatIconModule, MatButtonModule, PageHeader],
+  imports: [FormsModule, MatIconModule, MatButtonModule, MatAutocompleteModule, PageHeader],
+  // Sheet styles are global (`src/styles/_sheet.scss`) — the party sheet shares them.
   templateUrl: './entry.html',
-  styleUrl: './entry.scss',
 })
 export class Entry {
   private readonly store = inject(LedgerStore);
@@ -149,6 +167,13 @@ export class Entry {
 
   /** Set once the row named by `edit` has been loaded into the form. */
   readonly editingId = signal<string | null>(null);
+  /** Provenance of the row being edited: a staged draft or a base-ledger row. */
+  readonly editingKind = signal<'row' | 'draft' | null>(null);
+  /**
+   * How the edit began. A `query` edit (from the Ledger tab) returns there on
+   * save/cancel; an `inline` edit stays on the sheet.
+   */
+  private editSource: 'query' | 'inline' = 'inline';
 
   protected readonly date = signal(todayIso());
   protected readonly item = signal('Rock');
@@ -184,6 +209,20 @@ export class Entry {
   protected readonly vehicles = this.store.vehicleOptions;
   protected readonly isEditing = computed(() => this.editingId() !== null);
 
+  // Type-ahead panels. Unlike a datalist, a chosen value reopens with the FULL
+  // list (see filterOptions) — the dropdown keeps working after a pick.
+  protected readonly crusherPanel = computed(() => filterOptions(this.crushers(), this.crusher()));
+  protected readonly vehiclePanel = computed(() => filterOptions(this.vehicles(), this.vehicle()));
+
+  /** Per-draft panel options (called from the template with the row's value). */
+  protected filterCrushers(value: string): string[] {
+    return filterOptions(this.crushers(), value);
+  }
+
+  protected filterVehicles(value: string): string[] {
+    return filterOptions(this.vehicles(), value);
+  }
+
   /** True when the current crusher + pass type actually has a chart entry. */
   private readonly hasPrefill = computed(
     () =>
@@ -201,15 +240,36 @@ export class Entry {
    */
   protected readonly preview = computed(() => computeRow(this.draft()));
 
+  /**
+   * A new row only needs a quantity — the quarry's raw data arrives without a
+   * crusher, and such rows stage as drafts. Editing a BASE-LEDGER row still
+   * requires its crusher: the ledger never holds a row that reports nowhere.
+   */
   protected readonly canSave = computed(
-    () => this.crusher().trim() !== '' && (this.qty() ?? 0) > 0,
+    () =>
+      (this.qty() ?? 0) > 0 &&
+      (this.editingKind() !== 'row' || this.crusher().trim() !== ''),
   );
 
-  /** The date's saved rows, oldest first so new ones land just above the entry row. */
-  private readonly allDayRows = computed(() =>
-    this.store.rows().filter((row) => row.date === this.date()),
-  );
-  protected readonly dayRows = computed(() => this.allDayRows().slice(-VISIBLE_DAY_ROWS));
+  /**
+   * The date's rows, oldest first so new ones land just above the entry row:
+   * base-ledger rows first, then the staged drafts (closest to where you type,
+   * since they are the ones still in progress).
+   */
+  private readonly allDayItems = computed<{ row: LedgerRow; kind: 'row' | 'draft' }[]>(() => {
+    const date = this.date();
+    return [
+      ...this.store
+        .rows()
+        .filter((row) => row.date === date)
+        .map((row) => ({ row, kind: 'row' as const })),
+      ...this.store
+        .drafts()
+        .filter((row) => row.date === date)
+        .map((row) => ({ row, kind: 'draft' as const })),
+    ];
+  });
+  private readonly dayItems = computed(() => this.allDayItems().slice(-VISIBLE_DAY_ROWS));
 
   /**
    * The visible saved rows with their derived values and rate-difference flags
@@ -219,10 +279,12 @@ export class Entry {
     const chart = this.store.rateChart();
     const discount = this.store.discountRate();
 
-    return this.dayRows().map((row) => {
+    return this.dayItems().map(({ row, kind }) => {
       const prefill = ratePrefill(chart, row.crusher, row.passType, discount);
       return {
         row,
+        kind,
+        incomplete: kind === 'draft' && !isDraftComplete(row),
         calc: computeRow(row),
         comparable: prefill !== undefined,
         differs: {
@@ -240,10 +302,21 @@ export class Entry {
     () => this.dayRowViews().filter((v) => Object.values(v.differs).some(Boolean)).length,
   );
   protected readonly hiddenDayRows = computed(
-    () => this.allDayRows().length - this.dayRows().length,
+    () => this.allDayItems().length - this.dayItems().length,
   );
-  protected readonly dayTotals = computed(() => summarize(this.allDayRows()));
+  protected readonly dayTotals = computed(() =>
+    summarize(this.allDayItems().map((item) => item.row)),
+  );
   protected readonly dayLabel = computed(() => formatDate(this.date()));
+
+  // --- Draft sync ------------------------------------------------------------
+
+  protected readonly draftCount = computed(() => this.store.drafts().length);
+  protected readonly syncableCount = computed(
+    () => this.store.drafts().filter(isDraftComplete).length,
+  );
+  protected readonly heldCount = computed(() => this.draftCount() - this.syncableCount());
+  protected readonly syncing = signal(false);
 
   constructor() {
     // Autopopulate the rate cells on crusher / pass-type change. A chart miss
@@ -271,12 +344,24 @@ export class Entry {
       this.commRate.set(this.store.discountRate());
     });
 
-    // Load the row named by `?edit=<id>` once the store has hydrated.
+    // Load the row named by `?edit=<id>` once the store has hydrated. The
+    // Ledger tab links to ledger rows, but a draft id in the URL works too.
     effect(() => {
       const id = this.edit();
       if (!id || !this.store.ready() || this.editingId() === id) return;
       const row = this.store.rowById(id);
-      if (row) this.loadRow(row);
+      if (row) {
+        this.editSource = 'query';
+        this.editingKind.set('row');
+        this.loadRow(row);
+        return;
+      }
+      const draft = this.store.draftById(id);
+      if (draft) {
+        this.editSource = 'query';
+        this.editingKind.set('draft');
+        this.loadRow(draft);
+      }
     });
   }
 
@@ -354,13 +439,17 @@ export class Entry {
     if (!this.canSave() || this.saving()) return;
     const draft = this.draftFields();
     const editingId = this.editingId();
+    const editingKind = this.editingKind();
 
     this.saving.set(true);
     try {
-      if (editingId) {
+      if (editingId && editingKind === 'row') {
         await this.store.updateRow(editingId, draft);
+      } else if (editingId) {
+        await this.store.updateDraft(editingId, draft);
       } else {
-        await this.store.addRow(draft);
+        // New rows always stage as drafts; "Save N to ledger" moves them across.
+        await this.store.addDraft(draft);
       }
     } catch (err) {
       this.snackBar.open(
@@ -373,7 +462,7 @@ export class Entry {
       this.saving.set(false);
     }
 
-    if (editingId) {
+    if (editingId && this.editSource === 'query') {
       // Go back where the edit started. `editingId` is deliberately left set: the
       // `?edit=` effect would otherwise see it cleared and reload the row straight
       // back into the form.
@@ -381,8 +470,28 @@ export class Entry {
       void this.router.navigate(['/ledger']);
       return;
     }
+    if (editingId) {
+      this.snackBar.open('Row updated', 'OK', { duration: 3000 });
+    }
 
     this.startNextRow();
+  }
+
+  /** Move every complete draft into the base ledger; incomplete ones stay put. */
+  protected async syncDraftsToLedger(): Promise<void> {
+    if (this.syncing() || !this.initialised() || this.syncableCount() === 0) return;
+    this.syncing.set(true);
+    try {
+      const { synced, held } = await this.store.syncDrafts();
+      const heldNote = held > 0 ? ` · ${held} held — missing crusher` : '';
+      this.snackBar.open(
+        `${synced} row${synced === 1 ? '' : 's'} saved to ledger${heldNote}`,
+        'OK',
+        { duration: 5000 },
+      );
+    } finally {
+      this.syncing.set(false);
+    }
   }
 
   /**
@@ -392,27 +501,118 @@ export class Entry {
    */
   private startNextRow(): void {
     this.editingId.set(null);
+    this.editingKind.set(null);
+    this.editSource = 'inline';
     this.qty.set(null);
     this.scroller()?.nativeElement.scrollTo({ left: 0 });
     this.qtyCell()?.nativeElement.focus();
   }
 
   protected cancelEdit(): void {
+    const fromQuery = this.editSource === 'query';
     this.editingId.set(null);
+    this.editingKind.set(null);
+    this.editSource = 'inline';
     this.qty.set(null);
-    void this.router.navigate(['/ledger']);
+    // An inline edit stays on the sheet; a Ledger-tab edit goes back there.
+    if (fromQuery) void this.router.navigate(['/ledger']);
+  }
+
+  // --- Inline draft editing ---------------------------------------------------
+  //
+  // Draft rows are live spreadsheet cells: every change lands in the store
+  // directly (durable via updateDraft), no pencil needed. Only synced LEDGER
+  // rows keep the explicit edit flow — they are in the book already, so
+  // changing them stays a deliberate action.
+
+  protected patchDraft(row: LedgerRow, patch: Partial<LedgerRowDraft>): void {
+    void this.store.updateDraft(row.id, patch);
+  }
+
+  protected patchDraftQty(row: LedgerRow, value: number | string): void {
+    const qty = Number(value);
+    this.patchDraft(row, { qty: Number.isFinite(qty) ? qty : 0 });
+  }
+
+  protected patchDraftRate(row: LedgerRow, field: RateField, value: number | string): void {
+    const parsed = Number(value);
+    this.patchDraft(row, { [field]: Number.isFinite(parsed) ? parsed : 0 });
+  }
+
+  /** A crusher typed into a draft re-resolves the chart, like the entry row. */
+  protected patchDraftCrusher(row: LedgerRow, crusher: string): void {
+    this.patchDraft(row, { crusher, ...this.draftRatePatch(row, crusher, row.passType) });
+  }
+
+  protected patchDraftPassType(row: LedgerRow, passType: PassType): void {
+    this.patchDraft(row, { passType, ...this.draftRatePatch(row, row.crusher, passType) });
+  }
+
+  /**
+   * The chart rates a crusher/pass change should apply to a draft — skipping
+   * any cell whose value differs from what would have been auto-filled before,
+   * i.e. one the user typed. Edited cells always beat autofill (client rule).
+   */
+  private draftRatePatch(
+    row: LedgerRow,
+    crusher: string,
+    passType: PassType | null,
+  ): Partial<LedgerRowDraft> {
+    const chart = this.store.rateChart();
+    const discount = this.store.discountRate();
+    const next = ratePrefill(chart, crusher, passType, discount);
+    if (!next) return {};
+    const prev = ratePrefill(chart, row.crusher, row.passType, discount);
+    const patch: Partial<LedgerRowDraft> = {};
+    for (const field of ['quaryRate', 'crusherRate', 'rentRate', 'commRate'] as const) {
+      // With no previous chart match, the untouched baseline is 0 — except
+      // comm, which defaults to the global discount rate on a fresh row.
+      const baseline = prev ? prev[field] : field === 'commRate' ? discount : 0;
+      if (row[field] === baseline) patch[field] = next[field];
+    }
+    return patch;
+  }
+
+  /** Start editing a saved row (ledger or draft) in place, on this sheet. */
+  protected editRow(view: SavedRowView): void {
+    this.editSource = 'inline';
+    this.editingKind.set(view.kind);
+    // Drop any ?edit= param, or its effect would reload that row over this one.
+    if (this.edit()) void this.router.navigate(['/entry'], { replaceUrl: true });
+    this.loadRow(view.row);
+  }
+
+  /** Delete a saved row (ledger or draft), always with an id-preserving Undo. */
+  protected async deleteRow(view: SavedRowView): Promise<void> {
+    const { row, kind } = view;
+    if (this.editingId() === row.id) {
+      // Deleting the row being edited: drop the edit state, keep the sheet.
+      this.editingId.set(null);
+      this.editingKind.set(null);
+      this.editSource = 'inline';
+    }
+    await deleteRowWithUndo(this.snackBar, {
+      message: kind === 'draft' ? 'Draft deleted' : 'Row deleted',
+      doDelete: () =>
+        kind === 'draft' ? this.store.deleteDraft(row.id) : this.store.deleteRow(row.id),
+      restore: () => {
+        if (kind === 'draft') return this.store.restoreDraft(row);
+        this.store.mergeImport({ rows: [row] });
+        return this.store.flush();
+      },
+    });
   }
 
   protected onCrusherChange(value: string): void {
     this.suppressPrefill = false;
-    // A new crusher means new chart rates, so previous overrides no longer apply.
-    this.overridden.set(new Set());
+    // Edited cells always beat autofill (client rule): a rate the user typed
+    // stays put even when the crusher or pass changes; only the untouched
+    // cells re-populate from the chart.
     this.crusher.set(value);
   }
 
   protected onPassTypeChange(value: PassType): void {
     this.suppressPrefill = false;
-    this.overridden.set(new Set());
     this.passType.set(value);
   }
 

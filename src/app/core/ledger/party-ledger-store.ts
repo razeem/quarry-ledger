@@ -52,6 +52,7 @@ export const PARTY_COLLECTION_VERSIONS = {
   'party-rates': 1,
   'party-vehicles': 1,
   'party-seed': 1,
+  'party-entry-drafts': 1,
 } as const;
 
 export type PartyLedgerRowDraft = Omit<PartyLedgerRow, 'id'>;
@@ -61,6 +62,17 @@ export interface PartyLedgerSnapshot {
   rows: PartyLedgerRow[];
   rates: PartyRateConfig[];
   vehicles: Vehicle[];
+  /** Staged entry-sheet rows not yet synced — optional, as in older backups. */
+  drafts?: PartyLedgerRow[];
+}
+
+/**
+ * Can this staged row be synced? Party is the daily book's "crusher": the raw
+ * quarry data arrives without it, so drafts accept its absence but sync holds
+ * such rows back.
+ */
+export function isPartyDraftComplete(row: Pick<PartyLedgerRow, 'party' | 'qty'>): boolean {
+  return row.party.trim() !== '' && row.qty > 0;
 }
 
 interface AccountCollections {
@@ -68,6 +80,7 @@ interface AccountCollections {
   rates: PersistentCollection<PartyRatesDoc>;
   vehicles: PersistentCollection<PartyVehiclesDoc>;
   seed: PersistentCollection<PartySeedDoc>;
+  drafts: PersistentCollection<PartyRowsDoc>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -115,6 +128,12 @@ export class PartyLedgerStore {
           defaults: { seeded: false },
           migrate: (data) => ({ seeded: (data as Partial<PartySeedDoc>)?.seeded === true }),
         }),
+        drafts: this.storage.bind<PartyRowsDoc>({
+          key: key('party-entry-drafts'),
+          version: PARTY_COLLECTION_VERSIONS['party-entry-drafts'],
+          defaults: { rows: [] },
+          migrate: (data) => ({ rows: (data as Partial<PartyRowsDoc>)?.rows ?? [] }),
+        }),
       };
       this.collectionsByAccount.set(accountId, existing);
     }
@@ -129,7 +148,11 @@ export class PartyLedgerStore {
   readonly ready = computed(() => {
     const cols = this.activeCols();
     return (
-      cols.rows.ready() && cols.rates.ready() && cols.vehicles.ready() && cols.seed.ready()
+      cols.rows.ready() &&
+      cols.rates.ready() &&
+      cols.vehicles.ready() &&
+      cols.seed.ready() &&
+      cols.drafts.ready()
     );
   });
 
@@ -146,6 +169,8 @@ export class PartyLedgerStore {
   });
 
   readonly rows = computed(() => this.activeCols().rows.value().rows);
+  /** Staged entry-sheet rows awaiting `syncDrafts()`, per book. */
+  readonly drafts = computed(() => this.activeCols().drafts.value().rows);
   readonly rates = computed(() => this.activeCols().rates.value().entries);
   readonly vehicles = computed(() => this.activeCols().vehicles.value().list);
 
@@ -164,8 +189,17 @@ export class PartyLedgerStore {
     return this.rows().find((row) => row.id === id);
   }
 
+  draftById(id: string): PartyLedgerRow | undefined {
+    return this.drafts().find((row) => row.id === id);
+  }
+
   snapshot(): PartyLedgerSnapshot {
-    return { rows: this.rows(), rates: this.rates(), vehicles: this.vehicles() };
+    return {
+      rows: this.rows(),
+      rates: this.rates(),
+      vehicles: this.vehicles(),
+      drafts: this.drafts(),
+    };
   }
 
   // --- Seeding ----------------------------------------------------------------
@@ -178,7 +212,11 @@ export class PartyLedgerStore {
       const accountId = this.accountId();
       const cols = this.activeCols();
       const hydrated =
-        cols.rows.ready() && cols.rates.ready() && cols.vehicles.ready() && cols.seed.ready();
+        cols.rows.ready() &&
+        cols.rates.ready() &&
+        cols.vehicles.ready() &&
+        cols.seed.ready() &&
+        cols.drafts.ready();
       if (!hydrated || cols.seed.value().seeded || this.seeding.has(accountId)) return;
       this.seeding.add(accountId);
       void this.seedAccount(accountId, cols);
@@ -246,6 +284,60 @@ export class PartyLedgerStore {
     await cols.rows.flush();
   }
 
+  // --- Staged drafts ---------------------------------------------------------
+  // The party twin of LedgerStore's staged drafts — same durability, same
+  // id-preserving sync (see the daily store for the full rationale).
+
+  /** Stage a row with a fresh immutable id; resolves once it is on disk. */
+  async addDraft(draft: PartyLedgerRowDraft): Promise<PartyLedgerRow> {
+    const row: PartyLedgerRow = { ...draft, id: newRowId() };
+    const cols = this.activeCols();
+    cols.drafts.update((doc) => ({ rows: [...doc.rows, row] }));
+    await cols.drafts.flush();
+    return row;
+  }
+
+  /** Patch a draft in place (id immutable); resolves once it is on disk. */
+  async updateDraft(id: string, patch: Partial<PartyLedgerRowDraft>): Promise<void> {
+    const cols = this.activeCols();
+    cols.drafts.update((doc) => ({
+      rows: doc.rows.map((row) => (row.id === id ? { ...row, ...patch, id: row.id } : row)),
+    }));
+    await cols.drafts.flush();
+  }
+
+  /** Remove a draft; resolves once the deletion is on disk. */
+  async deleteDraft(id: string): Promise<void> {
+    const cols = this.activeCols();
+    cols.drafts.update((doc) => ({ rows: doc.rows.filter((row) => row.id !== id) }));
+    await cols.drafts.flush();
+  }
+
+  /** Undo path: put a deleted draft back under its ORIGINAL id, idempotently. */
+  async restoreDraft(row: PartyLedgerRow): Promise<void> {
+    const cols = this.activeCols();
+    cols.drafts.update((doc) => ({ rows: mergePartyRows(doc.rows, [row]).rows }));
+    await cols.drafts.flush();
+  }
+
+  /**
+   * Move every complete draft into the book's rows, keeping each draft's id.
+   * Values copy verbatim — rates/splits were snapshotted at entry or edit time,
+   * and sync never recomputes. Incomplete drafts (no party / zero qty) stay.
+   */
+  async syncDrafts(): Promise<{ synced: number; held: number }> {
+    const cols = this.activeCols();
+    const drafts = this.drafts();
+    const complete = drafts.filter(isPartyDraftComplete);
+    const held = drafts.length - complete.length;
+    if (complete.length === 0) return { synced: 0, held };
+
+    cols.rows.set({ rows: mergePartyRows(this.rows(), complete).rows });
+    cols.drafts.set({ rows: drafts.filter((row) => !isPartyDraftComplete(row)) });
+    await Promise.all([cols.rows.flush(), cols.drafts.flush()]);
+    return { synced: complete.length, held };
+  }
+
   // --- Reference data -------------------------------------------------------------
 
   /**
@@ -272,6 +364,12 @@ export class PartyLedgerStore {
     const cols = this.activeCols();
     const result = mergePartyRows(this.rows(), incoming.rows ?? []);
     cols.rows.set({ rows: result.rows });
+    if (incoming.drafts?.length) {
+      // Staged rows already synced here (same id in the ledger) are not re-staged.
+      const syncedIds = new Set(result.rows.map((row) => row.id));
+      const unsynced = incoming.drafts.filter((row) => !syncedIds.has(row.id));
+      cols.drafts.set({ rows: mergePartyRows(this.drafts(), unsynced).rows });
+    }
     if (incoming.rates?.length) {
       cols.rates.set({ entries: mergePartyRates(this.rates(), incoming.rates) });
     }
@@ -288,6 +386,7 @@ export class PartyLedgerStore {
     cols.rows.set({ rows: snapshot.rows ?? [] });
     cols.rates.set({ entries: snapshot.rates ?? [] });
     cols.vehicles.set({ list: snapshot.vehicles ?? [] });
+    cols.drafts.set({ rows: snapshot.drafts ?? [] });
     // A restore counts as seeded, so the bundled seed never overwrites it.
     cols.seed.set({ seeded: true });
     await this.flushAccount(cols);
@@ -299,6 +398,7 @@ export class PartyLedgerStore {
     cols.rows.set({ rows: [] });
     cols.rates.set({ entries: [] });
     cols.vehicles.set({ list: [] });
+    cols.drafts.set({ rows: [] });
     cols.seed.set({ seeded: true });
     await this.flushAccount(cols);
   }
@@ -314,6 +414,7 @@ export class PartyLedgerStore {
       cols.rates.flush(),
       cols.vehicles.flush(),
       cols.seed.flush(),
+      cols.drafts.flush(),
     ]);
   }
 }

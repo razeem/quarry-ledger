@@ -1,10 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { PageHeader } from '../../shared/ui/page-header';
 import { SectionCard } from '../../shared/ui/section-card';
+import { AccountsStore } from '../../core/accounts/accounts-store';
 import { LedgerStore } from '../../core/ledger/ledger-store';
 import { LedgerTransfer } from '../../core/ledger/ledger-transfer';
 import { describeMerge } from '../../../domain/merge';
@@ -26,7 +34,27 @@ import type { PassType, RateChartEntry, Vehicle } from '../../../domain/types';
 export class LedgerSettingsPage {
   private readonly store = inject(LedgerStore);
   private readonly transfer = inject(LedgerTransfer);
+  private readonly accounts = inject(AccountsStore);
   private readonly snackBar = inject(MatSnackBar);
+
+  /** The book these settings belong to (the daily book when this page is up). */
+  protected readonly account = this.accounts.active;
+  protected readonly bookName = signal('');
+
+  constructor() {
+    // Track the stored name until the user renames; `account()` only changes on
+    // a rename or a book switch, so typing is never clobbered mid-edit.
+    effect(() => {
+      this.bookName.set(this.account().name);
+    });
+  }
+
+  protected async renameBook(): Promise<void> {
+    const name = this.bookName().trim();
+    if (!name || name === this.account().name) return;
+    await this.accounts.rename(this.account().id, name);
+    this.snackBar.open('Book renamed', 'OK', { duration: 3000 });
+  }
 
   protected readonly ready = this.store.ready;
   /**
@@ -173,6 +201,7 @@ export class LedgerSettingsPage {
           rateChart: snapshot.rateChart ?? [],
           vehicles: snapshot.vehicles ?? [],
           settings: snapshot.settings ?? { discountRatePerTon: this.discountRate() },
+          drafts: snapshot.drafts ?? [],
         });
         await this.store.flush();
         this.toast(`Restored ${snapshot.rows?.length ?? 0} rows`);

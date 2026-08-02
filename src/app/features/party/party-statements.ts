@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog } from '@angular/material/dialog';
 import { PageHeader } from '../../shared/ui/page-header';
 import { SectionCard } from '../../shared/ui/section-card';
 import { StatTile } from '../../shared/ui/stat-tile';
@@ -11,6 +12,29 @@ import { partyStatement, reconcileQty } from '../../../domain/party/reports';
 import { computePartyRow, type ComputedPartyRow } from '../../../domain/party/calc';
 import { formatDate, formatInr, formatTons } from '../../../domain/format';
 import type { PartyLedgerRow } from '../../../domain/party/types';
+import type {
+  PrintChoice,
+  PrintOptions,
+  PrintOptionsData,
+  PrintOptionsDialog,
+} from '../../shared/print/print-options-dialog';
+import { handoffToPrint, printStamp } from '../../shared/print/print-flow';
+
+/** The printable sections of this page — both scoped to the selected party. */
+type PrintSection = 'statement' | 'loads';
+
+const PRINT_CHOICES: readonly PrintChoice<PrintSection>[] = [
+  {
+    key: 'statement',
+    label: 'Statement',
+    hint: 'Payable, receivable, per-owner rent and the profit split',
+  },
+  {
+    key: 'loads',
+    label: 'All loads',
+    hint: 'Every load recorded against this party',
+  },
+];
 
 /**
  * One party's full statement: quarry payable, receivable, per-owner rent and
@@ -34,6 +58,7 @@ import type { PartyLedgerRow } from '../../../domain/party/types';
 })
 export class PartyStatements {
   private readonly store = inject(PartyLedgerStore);
+  private readonly dialog = inject(MatDialog);
 
   protected readonly account = this.store.account;
   protected readonly initialised = this.store.initialised;
@@ -78,6 +103,45 @@ export class PartyStatements {
     this.partyTouched.set(true);
     this.party.set(value);
     this.statedQty.set(null);
+  }
+
+  // --- Printing --------------------------------------------------------------
+
+  /** Sections included in the next printout; empty until Print is used. */
+  protected readonly printSections = signal<readonly PrintSection[]>([]);
+  protected readonly printedAt = signal('');
+
+  protected includesSection(section: PrintSection): boolean {
+    return this.printSections().includes(section);
+  }
+
+  protected async print(): Promise<void> {
+    // Lazy: the dialog and its checkbox module only load when someone prints.
+    const { PrintOptionsDialog: Dialog } = await import(
+      '../../shared/print/print-options-dialog'
+    );
+
+    const data: PrintOptionsData<PrintSection> = {
+      choices: PRINT_CHOICES,
+      selected: ['statement'],
+      // Both sections are "the selected party"; flag them when it has no rows.
+      emptyKeys: this.statement().loads === 0 ? ['statement', 'loads'] : [],
+    };
+
+    const ref = this.dialog.open<
+      PrintOptionsDialog,
+      PrintOptionsData<PrintSection>,
+      PrintOptions<PrintSection>
+    >(Dialog, { data, autoFocus: false, width: '440px', maxWidth: '94vw' });
+
+    const options = await new Promise<PrintOptions<PrintSection> | undefined>((resolve) =>
+      ref.afterClosed().subscribe(resolve),
+    );
+    if (!options?.sections.length) return;
+
+    this.printedAt.set(printStamp());
+    this.printSections.set(options.sections);
+    await handoffToPrint();
   }
 
   protected calc(row: PartyLedgerRow): ComputedPartyRow {

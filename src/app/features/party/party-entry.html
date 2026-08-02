@@ -1,319 +1,540 @@
-<div class="app-page">
+<div class="app-page app-page--wide">
   <app-page-header
-    [title]="isEditing() ? 'Edit load' : 'Entry'"
-    [subtitle]="account().name + ' — rates and profit split autofill from the party setup.'"
-    icon="add_circle"
-  />
+    [title]="isEditing() ? 'Edit load' : 'New load'"
+    [subtitle]="
+      isEditing()
+        ? 'Rates and split stay as they were snapshotted on this row.'
+        : account().name + ' — fill the plain cells; the tinted ones fill themselves from the party setup.'
+    "
+    icon="table_rows"
+  >
+    @if (isEditing()) {
+      <button
+        actions
+        mat-stroked-button
+        type="button"
+        (click)="cancelEdit()"
+        data-testid="party-entry-cancel"
+      >
+        <mat-icon>close</mat-icon>
+        Cancel edit
+      </button>
+    }
+  </app-page-header>
 
   @if (!initialised()) {
     <p class="app-empty" data-testid="party-entry-loading">Loading the party ledger…</p>
   }
 
-  <form
-    class="flex flex-col gap-4"
-    (submit)="$event.preventDefault(); save()"
-    [attr.aria-busy]="saving()"
-  >
-    <app-section-card title="Load" icon="local_shipping">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div>
-          <label class="app-label" for="party-entry-date">Date</label>
-          <input
-            id="party-entry-date"
-            class="app-field"
-            type="date"
-            [ngModel]="date()"
-            (ngModelChange)="date.set($event)"
-            name="date"
-            data-testid="party-entry-date"
-          />
-        </div>
-
-        <div>
-          <label class="app-label" for="party-entry-party">Party</label>
-          <!-- Free text: a brand-new party can be typed straight in. -->
-          <input
-            id="party-entry-party"
-            class="app-field"
-            type="text"
-            list="party-options"
-            autocomplete="off"
-            placeholder="Party"
-            [ngModel]="party()"
-            (ngModelChange)="onPartyChange($event)"
-            name="party"
-            data-testid="party-entry-party"
-          />
-          <datalist id="party-options">
-            @for (name of parties(); track name) {
-              <option [value]="name"></option>
-            }
-          </datalist>
-        </div>
-
-        <div>
-          <label class="app-label" for="party-entry-qty">Qty (t)</label>
-          <input
-            #qtyField
-            id="party-entry-qty"
-            class="app-field"
-            type="number"
-            inputmode="decimal"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            [ngModel]="qty()"
-            (ngModelChange)="qty.set($event)"
-            name="qty"
-            data-testid="party-entry-qty"
-          />
-        </div>
-
-        <div>
-          <span class="app-label">Vehicle rent</span>
-          <div class="flex rounded-lg overflow-hidden border border-[var(--border)]">
-            <button
-              type="button"
-              class="flex-1 px-2 py-2 text-sm font-semibold transition-colors"
-              [class.bg-[var(--mat-sys-primary-container)]]="withRent()"
-              (click)="onWithRentChange(true)"
-              data-testid="party-entry-with-rent"
-            >
-              With
-            </button>
-            <button
-              type="button"
-              class="flex-1 px-2 py-2 text-sm font-semibold transition-colors"
-              [class.bg-[var(--mat-sys-primary-container)]]="!withRent()"
-              (click)="onWithRentChange(false)"
-              data-testid="party-entry-without-rent"
-            >
-              Without
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <label class="app-label" for="party-entry-vehicle">Vehicle</label>
-          <input
-            id="party-entry-vehicle"
-            class="app-field"
-            type="text"
-            list="party-vehicle-options"
-            autocomplete="off"
-            placeholder="KL 00 …"
-            [ngModel]="vehicle()"
-            (ngModelChange)="onVehicleChange($event)"
-            name="vehicle"
-            data-testid="party-entry-vehicle"
-          />
-          <datalist id="party-vehicle-options">
-            @for (num of vehicles(); track num) {
-              <option [value]="num"></option>
-            }
-          </datalist>
-        </div>
-
-        <div>
-          <label class="app-label" for="party-entry-owner">Owner</label>
-          <input
-            id="party-entry-owner"
-            class="app-field"
-            type="text"
-            autocomplete="off"
-            placeholder="Autofills from vehicle"
-            [ngModel]="owner()"
-            (ngModelChange)="onOwnerEdit($event)"
-            name="owner"
-            data-testid="party-entry-owner"
-          />
-        </div>
-      </div>
-    </app-section-card>
-
-    <app-section-card
-      title="Rates"
-      icon="request_quote"
-      subtitle="Snapshotted onto the row when you save — editing the setup later never changes saved rows."
-    >
-      <div class="grid grid-cols-3 gap-3">
-        @for (
-          rate of [
-            { field: 'quaryRate', label: 'Quary ₹/t', testid: 'party-entry-quary-rate' },
-            { field: 'billRate', label: 'Bill ₹/t', testid: 'party-entry-bill-rate' },
-            { field: 'rentRate', label: 'Rent ₹/t', testid: 'party-entry-rent-rate' },
-          ];
-          track rate.field
-        ) {
-          <div>
-            <label class="app-label flex items-center gap-1" [for]="rate.testid">
-              {{ rate.label }}
-              @switch (rateOrigin($any(rate.field))) {
-                @case ('auto') {
-                  <span
-                    class="text-[0.6rem] font-bold uppercase tracking-wide px-1 rounded bg-[var(--chip-bg)] text-[var(--text-soft)]"
-                    >auto</span
-                  >
-                }
-                @case ('saved') {
-                  <span
-                    class="text-[0.6rem] font-bold uppercase tracking-wide px-1 rounded bg-[var(--chip-bg)] text-[var(--text-soft)]"
-                    >saved</span
-                  >
-                }
-                @case ('edited') {
-                  <span
-                    class="text-[0.6rem] font-bold uppercase tracking-wide px-1 rounded bg-[var(--mat-sys-primary-container)]"
-                    >edited</span
-                  >
-                }
+  <form (ngSubmit)="save()" [attr.aria-busy]="saving()">
+    <!--
+      The party book as a sheet — the same contract as the daily Entry tab: the
+      header pins to the top, the entry row pins to the bottom, saved rows stack
+      above it, and the grid scrolls sideways inside its own box.
+    -->
+    <div class="sheet-wrap app-section">
+      <div class="sheet-scroll" #scroller>
+        <table class="sheet">
+          <caption class="sr-only">
+            Rows already saved for this date, followed by the new-load entry row
+          </caption>
+          <thead>
+            <tr>
+              @for (col of COLUMNS; track col.key) {
+                <!-- Fixed-width unless flex: only the free-text columns absorb
+                     surplus width, so numeric cells stay compact on wide screens. -->
+                <th
+                  scope="col"
+                  [class.sheet__th--auto]="col.group === 'auto'"
+                  [class.sheet__th--calc]="col.group === 'calc'"
+                  [style.min-width.px]="col.width"
+                  [style.width.px]="col.flex ? null : col.width"
+                >
+                  {{ col.label }}
+                </th>
               }
-            </label>
-            <input
-              [id]="rate.testid"
-              class="app-field app-num"
-              type="number"
-              inputmode="decimal"
-              min="0"
-              [disabled]="rate.field === 'rentRate' && !withRent()"
-              [ngModel]="rateValue($any(rate.field))"
-              (ngModelChange)="onRateEdit($any(rate.field), $event)"
-              [name]="rate.field"
-              [attr.data-testid]="rate.testid"
-            />
-          </div>
-        }
+            </tr>
+          </thead>
+
+          <tbody>
+            <!-- ---------- rows already saved for this date, oldest first ---------- -->
+            <!-- Ledger rows first, then staged drafts (still editable here). -->
+            @for (view of dayRowViews(); track view.row.id) {
+              <tr
+                class="sheet__saved"
+                [class.sheet__saved--draft]="view.kind === 'draft'"
+                [attr.data-testid]="'party-saved-' + view.row.id"
+              >
+                <!-- Draft rows are LIVE cells: every change persists directly, no
+                     pencil needed. Enter is swallowed in them so it never
+                     re-submits the entry row while an editor works up here. -->
+                @if (view.kind === 'draft') {
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="date"
+                      [ngModel]="view.row.date"
+                      (ngModelChange)="patchDraft(view.row, { date: $event })"
+                      [ngModelOptions]="{ standalone: true }"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft date"
+                      [attr.data-testid]="'party-draft-date-' + view.row.id"
+                    />
+                  </td>
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="Party"
+                      [ngModel]="view.row.party"
+                      (ngModelChange)="patchDraftParty(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      [matAutocomplete]="draftPartyAuto"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft party"
+                      [attr.data-testid]="'party-draft-party-' + view.row.id"
+                    />
+                    <mat-autocomplete #draftPartyAuto="matAutocomplete">
+                      @for (name of filterParties(view.row.party); track name) {
+                        <mat-option [value]="name">{{ name }}</mat-option>
+                      }
+                    </mat-autocomplete>
+                  </td>
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell sheet__cell--num"
+                      type="number"
+                      inputmode="decimal"
+                      step="0.01"
+                      min="0"
+                      [ngModel]="view.row.qty"
+                      (ngModelChange)="patchDraftQty(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft quantity"
+                      [attr.data-testid]="'party-draft-qty-' + view.row.id"
+                    />
+                  </td>
+                  <td class="sheet__editcell">
+                    <select
+                      class="sheet__cell"
+                      [ngModel]="view.row.withRent"
+                      (ngModelChange)="patchDraftRentMode(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft rent mode"
+                      [attr.data-testid]="'party-draft-rent-' + view.row.id"
+                    >
+                      <option [ngValue]="true">With</option>
+                      <option [ngValue]="false">W/O</option>
+                    </select>
+                  </td>
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="KL 00 …"
+                      [ngModel]="view.row.vehicle"
+                      (ngModelChange)="patchDraftVehicle(view.row, $event)"
+                      [ngModelOptions]="{ standalone: true }"
+                      [matAutocomplete]="draftVehicleAuto"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft vehicle"
+                      [attr.data-testid]="'party-draft-vehicle-' + view.row.id"
+                    />
+                    <mat-autocomplete #draftVehicleAuto="matAutocomplete">
+                      @for (num of filterVehicles(view.row.vehicle); track num) {
+                        <mat-option [value]="num">{{ num }}</mat-option>
+                      }
+                    </mat-autocomplete>
+                  </td>
+                  <td class="sheet__editcell">
+                    <input
+                      class="sheet__cell"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="Owner"
+                      [ngModel]="view.row.owner"
+                      (ngModelChange)="patchDraft(view.row, { owner: $event })"
+                      [ngModelOptions]="{ standalone: true }"
+                      (keydown.enter)="$event.preventDefault()"
+                      (focus)="revealCell($event)"
+                      aria-label="Draft owner"
+                      [attr.data-testid]="'party-draft-owner-' + view.row.id"
+                    />
+                  </td>
+                } @else {
+                  <td>{{ view.row.date }}</td>
+                  <td>{{ view.row.party }}</td>
+                  <td class="app-num text-right">{{ view.row.qty.toFixed(2) }}</td>
+                  <td>{{ view.row.withRent ? 'With' : 'W/O' }}</td>
+                  <td>{{ view.row.vehicle || '—' }}</td>
+                  <td>{{ view.row.owner || '—' }}</td>
+                }
+                @for (rate of RATE_COLUMNS; track rate.field) {
+                  <td
+                    [class.sheet__editcell]="view.kind === 'draft'"
+                    [class.app-num]="view.kind !== 'draft'"
+                    [class.text-right]="view.kind !== 'draft'"
+                    [class.sheet__saved--differs]="view.differs[rate.field]"
+                    [attr.title]="view.differs[rate.field] ? DIFFERS_HINT : null"
+                  >
+                    @if (view.kind === 'draft') {
+                      <input
+                        class="sheet__cell sheet__cell--num"
+                        type="number"
+                        inputmode="decimal"
+                        step="1"
+                        min="0"
+                        [disabled]="rate.field === 'rentRate' && !view.row.withRent"
+                        [ngModel]="view.row[rate.field]"
+                        (ngModelChange)="patchDraftRate(view.row, rate.field, $event)"
+                        [ngModelOptions]="{ standalone: true }"
+                        (keydown.enter)="$event.preventDefault()"
+                        (focus)="revealCell($event)"
+                        [attr.aria-label]="'Draft ' + rate.label"
+                        [attr.data-testid]="'party-draft-' + rate.field + '-' + view.row.id"
+                      />
+                    } @else {
+                      {{ view.row[rate.field] }}
+                    }
+                  </td>
+                }
+                <td class="app-num text-right">{{ inr(view.calc.quarryAmount) }}</td>
+                <td class="app-num text-right">{{ inr(view.calc.billAmount) }}</td>
+                <td class="app-num text-right">{{ inr(view.calc.rentAmount) }}</td>
+                <td class="app-num text-right" [class.sheet__calc--loss]="view.calc.profitAmount < 0">
+                  {{ inr(view.calc.profitAmount) }}
+                </td>
+                <td class="sheet__rowactions">
+                  @if (view.kind === 'draft') {
+                    <!-- Drafts edit in place — no pencil, just the marker. -->
+                    <span
+                      class="sheet__draft-chip"
+                      [attr.title]="
+                        view.incomplete
+                          ? 'Staged here — needs a party before it can be saved to the ledger'
+                          : 'Staged here — included in the next “Save to ledger”'
+                      "
+                      >draft</span
+                    >
+                  } @else {
+                    <button
+                      mat-icon-button
+                      type="button"
+                      class="!h-9 !w-9"
+                      (click)="editRow(view)"
+                      [attr.aria-label]="'Edit load of ' + (view.row.party || 'no party')"
+                      [attr.data-testid]="'party-row-edit-' + view.row.id"
+                    >
+                      <mat-icon class="!text-lg">edit</mat-icon>
+                    </button>
+                  }
+                  <button
+                    mat-icon-button
+                    type="button"
+                    class="!h-9 !w-9"
+                    (click)="deleteRow(view)"
+                    [attr.aria-label]="'Delete load of ' + (view.row.party || 'no party')"
+                    [attr.data-testid]="'party-row-delete-' + view.row.id"
+                  >
+                    <mat-icon class="!text-lg">delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            }
+
+            <!-- ---------- the entry row ---------- -->
+            <tr class="sheet__entry">
+              <td>
+                <input
+                  class="sheet__cell"
+                  type="date"
+                  aria-label="Date"
+                  [ngModel]="date()"
+                  (ngModelChange)="date.set($event)"
+                  (focus)="revealCell($event)"
+                  name="date"
+                  data-testid="party-entry-date"
+                />
+              </td>
+
+              <td>
+                <!-- Free text with a real dropdown: a brand-new party can be
+                     typed straight in, and a chosen value reopens the full list. -->
+                <input
+                  class="sheet__cell"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Party"
+                  aria-label="Party"
+                  [ngModel]="party()"
+                  (ngModelChange)="onPartyChange($event)"
+                  [matAutocomplete]="partyAuto"
+                  (focus)="revealCell($event)"
+                  name="party"
+                  data-testid="party-entry-party"
+                />
+                <mat-autocomplete #partyAuto="matAutocomplete">
+                  @for (name of partyPanel(); track name) {
+                    <mat-option [value]="name">{{ name }}</mat-option>
+                  }
+                </mat-autocomplete>
+              </td>
+
+              <td>
+                <input
+                  #qtyCell
+                  class="sheet__cell sheet__cell--num"
+                  type="number"
+                  inputmode="decimal"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  aria-label="Quantity in tons"
+                  [ngModel]="qty()"
+                  (ngModelChange)="qty.set($event)"
+                  (focus)="revealCell($event)"
+                  name="qty"
+                  data-testid="party-entry-qty"
+                />
+              </td>
+
+              <td>
+                <div class="sheet__toggle">
+                  <button
+                    type="button"
+                    [class.sheet__toggle--on]="withRent()"
+                    (click)="onWithRentChange(true)"
+                    data-testid="party-entry-with-rent"
+                  >
+                    With
+                  </button>
+                  <button
+                    type="button"
+                    [class.sheet__toggle--on]="!withRent()"
+                    (click)="onWithRentChange(false)"
+                    data-testid="party-entry-without-rent"
+                  >
+                    W/O
+                  </button>
+                </div>
+              </td>
+
+              <td>
+                <!-- Registrations are messy free text and are never normalised. -->
+                <input
+                  class="sheet__cell"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="KL 00 …"
+                  aria-label="Vehicle registration"
+                  [ngModel]="vehicle()"
+                  (ngModelChange)="onVehicleChange($event)"
+                  [matAutocomplete]="vehicleAuto"
+                  (focus)="revealCell($event)"
+                  name="vehicle"
+                  data-testid="party-entry-vehicle"
+                />
+                <mat-autocomplete #vehicleAuto="matAutocomplete">
+                  @for (num of vehiclePanel(); track num) {
+                    <mat-option [value]="num">{{ num }}</mat-option>
+                  }
+                </mat-autocomplete>
+              </td>
+
+              <td>
+                <input
+                  class="sheet__cell"
+                  type="text"
+                  autocomplete="off"
+                  placeholder="Autofills"
+                  aria-label="Vehicle owner"
+                  [ngModel]="owner()"
+                  (ngModelChange)="onOwnerEdit($event)"
+                  (focus)="revealCell($event)"
+                  name="owner"
+                  data-testid="party-entry-owner"
+                />
+              </td>
+
+              <!-- The three autofilled rate cells: tinted, badged, still editable. -->
+              @for (rate of RATE_COLUMNS; track rate.field) {
+                <td class="sheet__autocell">
+                  <input
+                    class="sheet__cell sheet__cell--num"
+                    [class.sheet__cell--auto]="isAuto(rate.field)"
+                    [class.sheet__cell--edited]="rateOrigin(rate.field) === 'edited'"
+                    type="number"
+                    inputmode="decimal"
+                    step="1"
+                    min="0"
+                    [disabled]="rate.field === 'rentRate' && !withRent()"
+                    [attr.aria-label]="rate.label"
+                    [ngModel]="rateValue(rate.field)"
+                    (ngModelChange)="onRateEdit(rate.field, $event)"
+                    (focus)="revealCell($event)"
+                    [name]="rate.field"
+                    [attr.data-testid]="rate.testid"
+                  />
+                  @if (rateOrigin(rate.field) !== 'none') {
+                    <span class="sheet__badge" aria-hidden="true">{{
+                      rateOrigin(rate.field)
+                    }}</span>
+                  }
+                </td>
+              }
+
+              <!-- Computed columns: read-only, straight from the party engine. -->
+              <td class="sheet__calc app-num" data-testid="party-preview-quarry">
+                {{ inr(preview().quarryAmount) }}
+              </td>
+              <td class="sheet__calc app-num" data-testid="party-preview-bill">
+                {{ inr(preview().billAmount) }}
+              </td>
+              <td class="sheet__calc app-num" data-testid="party-preview-rent">
+                {{ inr(preview().rentAmount) }}
+              </td>
+              <td
+                class="sheet__calc app-num"
+                [class.sheet__calc--loss]="preview().profitAmount < 0"
+                data-testid="party-preview-profit"
+              >
+                {{ inr(preview().profitAmount) }}
+              </td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
-      <div class="mt-3 flex flex-wrap items-center gap-2" data-testid="party-entry-shares">
-        <span class="app-label !mb-0">Profit split</span>
+      <!-- Totals strip: the money that matters, always on screen. -->
+      <div class="sheet-total">
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Quarry payable</span>
+          <span class="app-num" data-testid="party-total-quarry">
+            {{ inr(preview().quarryAmount) }}
+          </span>
+        </div>
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Receivable</span>
+          <span class="app-num" data-testid="party-total-bill">
+            {{ inr(preview().billAmount) }}
+          </span>
+        </div>
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Vehicle rent</span>
+          <span class="app-num" data-testid="party-total-rent">
+            {{ inr(preview().rentAmount) }}
+          </span>
+        </div>
+        <div class="sheet-total__item">
+          <span class="sheet-total__label">Profit (₹{{ perTonProfit() }}/t)</span>
+          <span
+            class="app-num sheet-total__strong"
+            [class.sheet-total__strong--loss]="preview().profitAmount < 0"
+            data-testid="party-total-profit"
+          >
+            {{ inr(preview().profitAmount) }}
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+      <button
+        mat-flat-button
+        class="!min-h-14 !text-base grow sm:grow-0"
+        type="submit"
+        [disabled]="!canSave() || saving() || !initialised()"
+        data-testid="party-entry-save"
+      >
+        <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
+        {{ isEditing() ? 'Update row' : 'Add row' }}
+      </button>
+
+      <!-- New rows stage as drafts; this moves every complete one to the ledger. -->
+      <button
+        mat-stroked-button
+        class="!min-h-14"
+        type="button"
+        (click)="syncDraftsToLedger()"
+        [disabled]="syncableCount() === 0 || syncing() || !initialised()"
+        data-testid="party-entry-sync-drafts"
+      >
+        <mat-icon>done_all</mat-icon>
+        Save {{ syncableCount() }} to ledger
+      </button>
+
+      @if (!initialised()) {
+        <p class="m-0 text-sm text-[var(--text-soft)]">Loading the party setup…</p>
+      } @else if (!canSave()) {
+        <p class="m-0 text-sm text-[var(--text-soft)]">
+          @if (editingKind() === 'row') {
+            Fill in a party and a quantity above 0.
+          } @else {
+            Enter a quantity above 0 — the party can come later.
+          }
+        </p>
+      } @else if (!isEditing()) {
+        <p class="m-0 text-sm text-[var(--text-soft)]">
+          Press Enter to add, then just type the next quantity.
+        </p>
+      }
+      @if (initialised() && heldCount() > 0) {
+        <p class="m-0 text-sm text-[var(--text-soft)]" data-testid="party-held-note">
+          {{ heldCount() }} draft{{ heldCount() === 1 ? '' : 's' }} still need a party.
+        </p>
+      }
+    </div>
+
+    <p
+      class="mt-3 mb-0 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--text-soft)]"
+    >
+      <span class="inline-flex items-center gap-1.5">
+        <span class="legend-swatch legend-swatch--auto"></span>
+        From the party setup
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="legend-swatch legend-swatch--edited"></span>
+        Differs from the setup
+        @if (rowsDifferingFromSetup() > 0) {
+          ({{ rowsDifferingFromSetup() }}
+          {{ rowsDifferingFromSetup() === 1 ? 'row' : 'rows' }} below)
+        }
+      </span>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="sheet__draft-chip">draft</span>
+        Staged here until “Save to ledger”
+      </span>
+      <span class="inline-flex items-center gap-1.5" data-testid="party-entry-shares">
+        Split:
         @if (profitShares().length === 0) {
-          <span class="text-sm text-[var(--text-soft)]">none for this mode</span>
+          <span>none for this mode</span>
         }
         @for (share of profitShares(); track share.name) {
-          <span
-            class="text-xs font-semibold px-2 py-1 rounded-full bg-[var(--chip-bg)] app-num"
-          >
+          <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--chip-bg)] app-num">
             {{ share.name }} ₹{{ share.perTon }}/t
           </span>
         }
-        <span class="text-xs text-[var(--text-soft)]">(edit in Setup)</span>
-      </div>
-    </app-section-card>
+        <span>(edit in Setup)</span>
+      </span>
+    </p>
 
-    <app-section-card title="This load" icon="calculate">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div>
-          <span class="app-label">Quarry payable</span>
-          <span class="app-num text-lg font-bold" data-testid="party-preview-quarry">{{
-            inr(preview().quarryAmount)
-          }}</span>
-        </div>
-        <div>
-          <span class="app-label">Receivable</span>
-          <span class="app-num text-lg font-bold" data-testid="party-preview-bill">{{
-            inr(preview().billAmount)
-          }}</span>
-        </div>
-        <div>
-          <span class="app-label">Vehicle rent</span>
-          <span class="app-num text-lg font-bold" data-testid="party-preview-rent">{{
-            inr(preview().rentAmount)
-          }}</span>
-        </div>
-        <div>
-          <span class="app-label">Profit (₹{{ perTonProfit() }}/t)</span>
-          <span class="app-num text-lg font-bold" data-testid="party-preview-profit">{{
-            inr(preview().profitAmount)
-          }}</span>
-        </div>
-      </div>
-
-      <div class="mt-4 flex gap-2">
-        <button
-          mat-flat-button
-          type="submit"
-          [disabled]="!canSave() || saving() || !initialised()"
-          data-testid="party-entry-save"
-        >
-          <mat-icon>{{ isEditing() ? 'save' : 'add' }}</mat-icon>
-          {{ isEditing() ? 'Save changes' : 'Add load' }}
-        </button>
-        @if (isEditing()) {
-          <button
-            mat-stroked-button
-            type="button"
-            (click)="cancelEdit()"
-            data-testid="party-entry-cancel"
-          >
-            Cancel
-          </button>
+    @if (dayTotals().loads) {
+      <p class="mt-3 mb-0 text-sm text-[var(--text-soft)]" data-testid="party-day-summary">
+        <strong>{{ dayTotals().loads }}</strong> rows on {{ dayLabel() }} ·
+        <span class="app-num">{{ tons(dayTotals().qty) }}</span>
+        @if (hiddenDayRows() > 0) {
+          · showing the latest {{ dayRowViews().length }}
         }
-      </div>
-    </app-section-card>
+      </p>
+    }
   </form>
-
-  <div class="mt-4">
-    <app-section-card
-      [title]="'Saved · ' + dayLabel()"
-      icon="receipt_long"
-      [subtitle]="dayRows().length + ' loads · ' + tons(dayQty())"
-    >
-      @if (dayRows().length === 0) {
-        <p class="app-empty" data-testid="party-day-empty">No loads on this date yet.</p>
-      } @else {
-        <div class="overflow-x-auto -mx-1 px-1">
-          <table class="app-table" data-testid="party-day-table">
-            <thead>
-              <tr>
-                <th scope="col">Party</th>
-                <th scope="col">Vehicle</th>
-                <th scope="col">Owner</th>
-                <th scope="col" class="app-num">Qty</th>
-                <th scope="col">Rent</th>
-                <th scope="col" class="app-num">Quarry ₹</th>
-                <th scope="col" class="app-num">Bill ₹</th>
-                <th scope="col" class="app-num">Rent ₹</th>
-                <th scope="col"></th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (row of dayRows(); track row.id) {
-                <tr>
-                  <td>{{ row.party }}</td>
-                  <td>{{ row.vehicle || '—' }}</td>
-                  <td>{{ row.owner || '—' }}</td>
-                  <td class="app-num">{{ row.qty.toFixed(2) }}</td>
-                  <td>{{ row.withRent ? 'With' : 'W/O' }}</td>
-                  <td class="app-num">{{ inr(calc(row).quarryAmount) }}</td>
-                  <td class="app-num">{{ inr(calc(row).billAmount) }}</td>
-                  <td class="app-num">{{ inr(calc(row).rentAmount) }}</td>
-                  <td class="whitespace-nowrap">
-                    <button
-                      mat-icon-button
-                      type="button"
-                      (click)="editRow(row)"
-                      aria-label="Edit row"
-                      [attr.data-testid]="'party-row-edit-' + row.id"
-                    >
-                      <mat-icon>edit</mat-icon>
-                    </button>
-                    <button
-                      mat-icon-button
-                      type="button"
-                      (click)="deleteRow(row)"
-                      aria-label="Delete row"
-                      [attr.data-testid]="'party-row-delete-' + row.id"
-                    >
-                      <mat-icon>delete</mat-icon>
-                    </button>
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        </div>
-      }
-    </app-section-card>
-  </div>
 </div>

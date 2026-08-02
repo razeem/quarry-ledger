@@ -17,7 +17,7 @@ import {
   summarizeGroups,
   type LedgerSummary,
 } from './summaries';
-import type { LedgerRow, Vehicle } from './types';
+import type { LedgerRow, PassType, Vehicle } from './types';
 
 // --- Daily summary ---------------------------------------------------------
 
@@ -198,4 +198,40 @@ export function lastActiveDateRange(rows: readonly LedgerRow[], days = 5): [stri
 export function rowsInRange(rows: readonly LedgerRow[], from: string, to: string): LedgerRow[] {
   const [lo, hi] = from <= to ? [from, to] : [to, from];
   return rows.filter((row) => row.date >= lo && row.date <= hi);
+}
+
+/** The Ledger page's filters. Empty string / null means "any". */
+export interface LedgerRowFilter {
+  from?: string;
+  to?: string;
+  /** Exact crusher name (picked from the known list, so no fuzziness needed). */
+  crusher?: string;
+  /** 'null' selects the rows with no pass type (they exist in real data). */
+  passType?: PassType | 'null' | '';
+  /** Case-sensitive substring of the RAW registration — free-text keys are
+   * never normalised, so `KL00T5450` and `KL 00 T 5450` are different strings
+   * and a partial like `5450` is how you find both. */
+  vehicle?: string;
+}
+
+/** Apply the Ledger page's filters. Pure; every criterion is optional. */
+export function filterLedgerRows(
+  rows: readonly LedgerRow[],
+  filter: LedgerRowFilter,
+): LedgerRow[] {
+  let result = [...rows];
+  if (filter.from && filter.to) result = rowsInRange(result, filter.from, filter.to);
+  else if (filter.from) result = result.filter((row) => row.date >= filter.from!);
+  else if (filter.to) result = result.filter((row) => row.date <= filter.to!);
+
+  if (filter.crusher) result = result.filter((row) => row.crusher === filter.crusher);
+  if (filter.passType === 'null') result = result.filter((row) => row.passType === null);
+  else if (filter.passType) result = result.filter((row) => row.passType === filter.passType);
+  if (filter.vehicle) result = result.filter((row) => row.vehicle.includes(filter.vehicle!));
+  return result;
+}
+
+/** Newest date first; ties keep entry order (stable sort). For the flat table. */
+export function sortByDateDesc(rows: readonly LedgerRow[]): LedgerRow[] {
+  return [...rows].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }

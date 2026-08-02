@@ -8,6 +8,7 @@ import {
   saveEntry,
   SEED_ROWS,
   setCrusher,
+  syncDrafts,
   visibleLoadCount,
   waitForToast,
 } from './helpers';
@@ -53,6 +54,8 @@ test.describe('create, edit, delete', () => {
     // Rates pre-fill from the chart, so the preview is live before saving.
     await expect(page.getByTestId('preview-crusher-amount')).not.toHaveText('₹0');
     await saveEntry(page);
+    // New rows stage as drafts; the Ledger only sees them once synced.
+    await syncDrafts(page);
 
     await openFullLedger(page);
     await expectLoadCount(page, SEED_ROWS + 1);
@@ -84,14 +87,19 @@ test.describe('create, edit, delete', () => {
     await page.getByTestId('entry-crusher').fill('EditMe Crusher');
     await page.getByTestId('entry-qty').fill('11');
     await saveEntry(page);
+    await syncDrafts(page);
 
     await page.goto('/ledger');
     await page.getByTestId('ledger-from').fill('2026-07-30');
     await page.getByTestId('ledger-to').fill('2026-07-30');
 
-    const table = page.getByTestId('ledger-table-2026-07-30');
+    const table = page.getByTestId('ledger-table');
     await expect(table).toContainText('EditMe Crusher');
-    await table.locator('tbody tr').first().getByRole('button').click();
+    await table
+      .locator('tbody tr')
+      .filter({ hasText: 'EditMe Crusher' })
+      .getByRole('button')
+      .click();
     await page.getByTestId('row-edit').click();
 
     // The edit form is pre-loaded with the row's own snapshotted values.
@@ -103,9 +111,9 @@ test.describe('create, edit, delete', () => {
     await page.goto('/ledger');
     await page.getByTestId('ledger-from').fill('2026-07-30');
     await page.getByTestId('ledger-to').fill('2026-07-30');
-    await expect(page.getByTestId('ledger-table-2026-07-30')).toContainText('22.00 t');
+    await expect(page.getByTestId('ledger-table')).toContainText('22.00 t');
     // The edit replaced the row rather than forking it.
-    await expect(page.getByTestId('ledger-table-2026-07-30')).not.toContainText('11.00 t');
+    await expect(page.getByTestId('ledger-table')).not.toContainText('11.00 t');
   });
 
   test('deleting a row keeps it deleted after a reload', async ({ page }) => {
@@ -114,14 +122,15 @@ test.describe('create, edit, delete', () => {
     await page.getByTestId('entry-crusher').fill('DeleteMe Crusher');
     await page.getByTestId('entry-qty').fill('7');
     await saveEntry(page);
+    await syncDrafts(page);
 
     await page.goto('/ledger');
     await page.getByTestId('ledger-from').fill('2026-07-30');
     await page.getByTestId('ledger-to').fill('2026-07-30');
     await page
-      .getByTestId('ledger-table-2026-07-30')
+      .getByTestId('ledger-table')
       .locator('tbody tr')
-      .first()
+      .filter({ hasText: 'DeleteMe Crusher' })
       .getByRole('button')
       .click();
     await page.getByTestId('row-delete').click();
@@ -132,6 +141,55 @@ test.describe('create, edit, delete', () => {
 
     await page.reload();
     await page.getByTestId('ledger-show-all').click();
+    await expectLoadCount(page, SEED_ROWS);
+  });
+});
+
+test.describe('filters and pagination', () => {
+  test('the crusher filter narrows the table and the totals', async ({ page }) => {
+    await openFullLedger(page);
+    await expectLoadCount(page, SEED_ROWS);
+
+    await page.getByTestId('ledger-filter-crusher').selectOption('Riverside Crusher');
+    // Fewer rows than the whole record, more than none.
+    const count = await visibleLoadCount(page);
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThan(SEED_ROWS);
+
+    // Every visible row is the chosen crusher.
+    const crushers = await page
+      .getByTestId('ledger-table')
+      .locator('tbody tr td:nth-child(2)')
+      .allTextContents();
+    expect(crushers.length).toBeGreaterThan(0);
+    expect(crushers.every((c) => c.trim() === 'Riverside Crusher')).toBe(true);
+  });
+
+  test('pages through the full record without repeating rows', async ({ page }) => {
+    await openFullLedger(page);
+    await expectLoadCount(page, SEED_ROWS);
+
+    // 143 rows at 25/page = 6 pages.
+    await expect(page.getByTestId('pager-label')).toHaveText(/1 \/ 6/);
+    await expect(page.getByTestId('pager-prev')).toBeDisabled();
+
+    const firstPage = await page
+      .getByTestId('ledger-table')
+      .locator('tbody tr')
+      .allTextContents();
+    expect(firstPage).toHaveLength(25);
+
+    await page.getByTestId('pager-next').click();
+    await expect(page.getByTestId('pager-label')).toHaveText(/2 \/ 6/);
+    const secondPage = await page
+      .getByTestId('ledger-table')
+      .locator('tbody tr')
+      .allTextContents();
+    expect(secondPage).toHaveLength(25);
+    // No row from page 1 reappears on page 2.
+    expect(secondPage.some((row) => firstPage.includes(row))).toBe(false);
+
+    // The totals line still covers the whole filtered set, not just the page.
     await expectLoadCount(page, SEED_ROWS);
   });
 });
@@ -274,6 +332,7 @@ test.describe('mobile', () => {
     await setCrusher(page, 'Riverside Crusher');
     await page.getByTestId('entry-qty').fill('12.5');
     await saveEntry(page);
+    await syncDrafts(page);
 
     await page.goto('/ledger');
     await page.getByTestId('ledger-show-all').click();

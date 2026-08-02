@@ -70,12 +70,14 @@ export const KNOWN_COLLECTIONS: Record<string, { label: string; version: number 
   vehicles: { label: 'Vehicles', version: 1 },
   'ledger-settings': { label: 'Ledger settings', version: 1 },
   'ledger-seed': { label: 'Seed state', version: 1 },
+  'entry-drafts': { label: 'Entry drafts', version: 1 },
   preferences: { label: 'Preferences', version: 1 },
   accounts: { label: 'Accounts', version: 1 },
   'party-rows': { label: 'Party ledger rows', version: 1 },
   'party-rates': { label: 'Party rates', version: 1 },
   'party-vehicles': { label: 'Party vehicles', version: 1 },
   'party-seed': { label: 'Party seed state', version: 1 },
+  'party-entry-drafts': { label: 'Party entry drafts', version: 1 },
 };
 
 /** `acc:<accountId>:<base>` -> its parts; a bare key is the default account's. */
@@ -220,6 +222,8 @@ function describe(key: string, data: unknown): string {
 
   switch (key) {
     case 'ledger-rows':
+    case 'entry-drafts':
+    case 'party-entry-drafts':
       return count(data['rows'], 'row');
     case 'rate-chart':
       return count(data['entries'], 'rate');

@@ -47,6 +47,31 @@ test('persists the theme choice across a reload', async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 });
 
+test('renames a book from the sidebar and from Settings; both survive a reload', async ({
+  page,
+}) => {
+  await page.goto('/entry');
+
+  // The sidebar pencil renames any book — including the built-in daily one.
+  await page.getByTestId('account-switcher').click();
+  await page.getByTestId('account-rename-default').click();
+  await page.getByTestId('rename-account-name').fill('Main Site');
+  await page.getByTestId('rename-account-submit').click();
+  await expect(page.getByTestId('account-switcher')).toContainText('Main Site');
+
+  // The daily Settings page carries a "This book" rename card too.
+  await page.goto('/settings');
+  await expect(page.getByTestId('settings-book-name')).toHaveValue('Main Site');
+  await page.getByTestId('settings-book-name').fill('North Quarry');
+  await page.getByTestId('settings-rename-book').click();
+  await expect(page.getByTestId('account-switcher')).toContainText('North Quarry');
+
+  // Only the label changed: the data and the tab set are untouched.
+  await page.reload();
+  await expect(page.getByTestId('account-switcher')).toContainText('North Quarry');
+  await expect(page.getByTestId('nav-ledger')).toBeVisible();
+});
+
 test('opens the settings dialog', async ({ page }) => {
   await page.goto('/entry');
   await page.getByTestId('settings-gear').click();

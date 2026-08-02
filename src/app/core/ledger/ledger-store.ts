@@ -45,6 +45,7 @@ export const COLLECTION_VERSIONS = {
   vehicles: 1,
   'ledger-settings': 1,
   'ledger-seed': 1,
+  'entry-drafts': 1,
 } as const;
 
 /** A new row minus its id — the store assigns the id and never changes it after. */
@@ -56,6 +57,20 @@ export interface LedgerSnapshot {
   rateChart: RateChartEntry[];
   vehicles: Vehicle[];
   settings: LedgerSettings;
+  /**
+   * Staged entry-sheet rows not yet synced to the ledger. Optional so older
+   * backups (which predate drafts) parse unchanged.
+   */
+  drafts?: LedgerRow[];
+}
+
+/**
+ * Can this staged row be synced to the ledger? The quarry's raw data arrives
+ * without a crusher, so drafts may be saved without one — but a ledger row
+ * without a crusher would report against nothing, so sync holds it back.
+ */
+export function isDraftComplete(row: Pick<LedgerRow, 'crusher' | 'qty'>): boolean {
+  return row.crusher.trim() !== '' && row.qty > 0;
 }
 
 /**
@@ -110,6 +125,19 @@ export class LedgerStore {
     migrate: (data) => ({ seeded: (data as Partial<SeedDoc>)?.seeded === true }),
   });
 
+  /**
+   * Staged rows from the entry sheet, durable like everything else but invisible
+   * to reports and the ledger until `syncDrafts()` moves them across. Draft rows
+   * carry their final id from the start, so syncing (even from two devices)
+   * dedupes cleanly by id.
+   */
+  private readonly draftsStore = this.storage.bind<RowsDoc>({
+    key: 'entry-drafts',
+    version: COLLECTION_VERSIONS['entry-drafts'],
+    defaults: { rows: [] },
+    migrate: (data) => ({ rows: (data as Partial<RowsDoc>)?.rows ?? [] }),
+  });
+
   // --- Read surface ---------------------------------------------------------
 
   /** True once every collection has hydrated from IndexedDB. */
@@ -119,7 +147,8 @@ export class LedgerStore {
       this.rateChartStore.ready() &&
       this.vehiclesStore.ready() &&
       this.settingsStore.ready() &&
-      this.seedStore.ready(),
+      this.seedStore.ready() &&
+      this.draftsStore.ready(),
   );
 
   /** Set once seeding has run to completion, successfully or not. */
@@ -142,6 +171,8 @@ export class LedgerStore {
   );
 
   readonly rows = computed(() => this.rowsStore.value().rows);
+  /** Staged entry-sheet rows awaiting `syncDrafts()`. */
+  readonly drafts = computed(() => this.draftsStore.value().rows);
   readonly rateChart = computed(() => this.rateChartStore.value().entries);
   readonly vehicles = computed(() => this.vehiclesStore.value().list);
   readonly settings = this.settingsStore.value;
@@ -160,12 +191,17 @@ export class LedgerStore {
     return this.rows().find((row) => row.id === id);
   }
 
+  draftById(id: string): LedgerRow | undefined {
+    return this.drafts().find((row) => row.id === id);
+  }
+
   snapshot(): LedgerSnapshot {
     return {
       rows: this.rows(),
       rateChart: this.rateChart(),
       vehicles: this.vehicles(),
       settings: this.settings(),
+      drafts: this.drafts(),
     };
   }
 
@@ -254,6 +290,60 @@ export class LedgerStore {
     await this.persistNow();
   }
 
+  // --- Staged drafts ---------------------------------------------------------
+  //
+  // The entry sheet stages rows here first: the quarry's raw data arrives
+  // incomplete (often no crusher), so a draft accepts whatever fields exist.
+  // Drafts are exactly as durable as rows — only reports and the ledger ignore
+  // them until they are synced.
+
+  /** Stage a row with a fresh immutable id; resolves once it is on disk. */
+  async addDraft(draft: LedgerRowDraft): Promise<LedgerRow> {
+    const row: LedgerRow = { ...draft, id: newRowId() };
+    this.draftsStore.update((doc) => ({ rows: [...doc.rows, row] }));
+    await this.draftsStore.flush();
+    return row;
+  }
+
+  /** Patch a draft in place (id immutable); resolves once it is on disk. */
+  async updateDraft(id: string, patch: Partial<LedgerRowDraft>): Promise<void> {
+    this.draftsStore.update((doc) => ({
+      rows: doc.rows.map((row) => (row.id === id ? { ...row, ...patch, id: row.id } : row)),
+    }));
+    await this.draftsStore.flush();
+  }
+
+  /** Remove a draft; resolves once the deletion is on disk. */
+  async deleteDraft(id: string): Promise<void> {
+    this.draftsStore.update((doc) => ({ rows: doc.rows.filter((row) => row.id !== id) }));
+    await this.draftsStore.flush();
+  }
+
+  /** Undo path: put a deleted draft back under its ORIGINAL id, idempotently. */
+  async restoreDraft(row: LedgerRow): Promise<void> {
+    this.draftsStore.update((doc) => ({ rows: mergeRows(doc.rows, [row]).rows }));
+    await this.draftsStore.flush();
+  }
+
+  /**
+   * Move every complete draft into the ledger, keeping each draft's id — the id
+   * is the merge key, so syncing the same staged rows from two devices dedupes
+   * instead of duplicating. Values are copied verbatim: rates were snapshotted
+   * when the draft was entered or edited, and sync never recomputes anything.
+   * Incomplete drafts (no crusher / zero qty) stay staged.
+   */
+  async syncDrafts(): Promise<{ synced: number; held: number }> {
+    const drafts = this.drafts();
+    const complete = drafts.filter(isDraftComplete);
+    const held = drafts.length - complete.length;
+    if (complete.length === 0) return { synced: 0, held };
+
+    this.rowsStore.set({ rows: mergeRows(this.rows(), complete).rows });
+    this.draftsStore.set({ rows: drafts.filter((row) => !isDraftComplete(row)) });
+    await Promise.all([this.rowsStore.flush(), this.draftsStore.flush()]);
+    return { synced: complete.length, held };
+  }
+
   /**
    * Land a row change in IndexedDB immediately instead of waiting out
    * `StorageService`'s 250 ms write debounce.
@@ -308,6 +398,12 @@ export class LedgerStore {
     const result = mergeRows(this.rows(), incoming.rows ?? []);
     this.rowsStore.set({ rows: result.rows });
 
+    if (incoming.drafts?.length) {
+      // Staged rows already synced here (same id in the ledger) are not re-staged.
+      const syncedIds = new Set(result.rows.map((row) => row.id));
+      const unsynced = incoming.drafts.filter((row) => !syncedIds.has(row.id));
+      this.draftsStore.set({ rows: mergeRows(this.drafts(), unsynced).rows });
+    }
     if (incoming.rateChart?.length) {
       this.rateChartStore.set({ entries: mergeRateChart(this.rateChart(), incoming.rateChart) });
     }
@@ -328,6 +424,7 @@ export class LedgerStore {
     this.rateChartStore.set({ entries: snapshot.rateChart ?? [] });
     this.vehiclesStore.set({ list: snapshot.vehicles ?? [] });
     this.settingsStore.set({ ...DEFAULT_SETTINGS, ...snapshot.settings });
+    this.draftsStore.set({ rows: snapshot.drafts ?? [] });
     this.seedStore.set({ seeded: true });
   }
 
@@ -340,6 +437,7 @@ export class LedgerStore {
     this.rateChartStore.set({ entries: [] });
     this.vehiclesStore.set({ list: [] });
     this.settingsStore.set({ ...DEFAULT_SETTINGS });
+    this.draftsStore.set({ rows: [] });
     this.seedStore.set({ seeded: true });
     await this.flush();
   }
@@ -352,6 +450,7 @@ export class LedgerStore {
       this.vehiclesStore.flush(),
       this.settingsStore.flush(),
       this.seedStore.flush(),
+      this.draftsStore.flush(),
     ]);
   }
 }

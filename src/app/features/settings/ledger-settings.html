@@ -18,6 +18,37 @@
   </app-page-header>
 
   <div class="flex flex-col gap-4">
+    <!-- ---------- This book ---------- -->
+    <app-section-card
+      title="This book"
+      icon="menu_book"
+      subtitle="The name shown in the sidebar, on reports and on printouts."
+    >
+      <div class="flex flex-wrap items-end gap-3">
+        <div class="grow max-w-xs">
+          <label class="app-label" for="settings-book-name">Name</label>
+          <input
+            id="settings-book-name"
+            class="app-field"
+            type="text"
+            [ngModel]="bookName()"
+            (ngModelChange)="bookName.set($event)"
+            name="bookName"
+            data-testid="settings-book-name"
+          />
+        </div>
+        <button
+          mat-stroked-button
+          type="button"
+          [disabled]="!bookName().trim() || bookName().trim() === account().name"
+          (click)="renameBook()"
+          data-testid="settings-rename-book"
+        >
+          Rename
+        </button>
+      </div>
+    </app-section-card>
+
     <!-- ---------- Discount rate ---------- -->
     <app-section-card
       title="Monthly discount"

@@ -3,7 +3,20 @@
     title="Statements"
     [subtitle]="account().name + ' — payable, receivable, rent and profit per party.'"
     icon="receipt_long"
-  />
+  >
+    <button
+      actions
+      mat-stroked-button
+      type="button"
+      class="no-print"
+      (click)="print()"
+      [disabled]="!initialised()"
+      data-testid="party-statements-print"
+    >
+      <mat-icon>print</mat-icon>
+      Print / PDF
+    </button>
+  </app-page-header>
 
   @if (!initialised()) {
     <p class="app-empty">Loading statements…</p>
@@ -213,4 +226,146 @@
       </app-section-card>
     </div>
   }
+
+  <!--
+    Print / save-as-PDF output for the SELECTED party. Hidden on screen and
+    revealed by the global @media print rules; same computeds as the page.
+  -->
+  <div class="report-print" data-testid="party-statement-print">
+    <h1 class="print-title">{{ account().name }}</h1>
+    <p class="print-meta">
+      @if (printedAt()) {
+        Generated {{ printedAt() }} ·
+      }
+      Statement — {{ party() || 'no party selected' }}
+    </p>
+
+    <!-- ---------- Statement ---------- -->
+    @if (includesSection('statement')) {
+      <section class="print-section">
+        <h2 class="print-section__title">Statement — {{ party() }}</h2>
+
+        <dl class="print-kv">
+          <dt>Loads</dt>
+          <dd>{{ statement().loads }}</dd>
+          <dt>Quantity</dt>
+          <dd>{{ tons(statement().qty) }}</dd>
+          <dt>Quarry payable</dt>
+          <dd>{{ inr(statement().quarryPayable) }}</dd>
+          <dt>Receivable</dt>
+          <dd>{{ inr(statement().receivable) }}</dd>
+          <dt>Rent payable</dt>
+          <dd>{{ inr(statement().rentPayable) }}</dd>
+          <dt>Profit</dt>
+          <dd>{{ inr(statement().profitTotal) }}</dd>
+        </dl>
+
+        @if (statement().ownerRent.length > 0) {
+          <h3 class="print-section__sub">Vehicle rent by owner</h3>
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Owner</th>
+                <th scope="col">Trips</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Rent ₹</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of statement().ownerRent; track line.owner) {
+                <tr>
+                  <td>{{ line.owner || '—' }}</td>
+                  <td>{{ line.trips }}</td>
+                  <td>{{ tons(line.qty) }}</td>
+                  <td>{{ inr(line.rent) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+
+        @if (statement().profit.length > 0) {
+          <h3 class="print-section__sub">Profit split</h3>
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (line of statement().profit; track line.name) {
+                <tr>
+                  <td>{{ line.name }}</td>
+                  <td>{{ tons(line.qty) }}</td>
+                  <td>{{ inr(line.amount) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td></td>
+                <td>{{ inr(statement().profitTotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+
+        @if (statement().loads === 0) {
+          <p class="print-empty">No loads recorded for this party.</p>
+        }
+      </section>
+    }
+
+    <!-- ---------- All loads ---------- -->
+    @if (includesSection('loads')) {
+      <section class="print-section">
+        <h2 class="print-section__title">All loads — {{ party() }}</h2>
+
+        @if (partyRows().length === 0) {
+          <p class="print-empty">No loads recorded for this party.</p>
+        } @else {
+          <table class="print-table">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Vehicle</th>
+                <th scope="col">Owner</th>
+                <th scope="col">Qty</th>
+                <th scope="col">Rent</th>
+                <th scope="col">Quarry ₹</th>
+                <th scope="col">Bill ₹</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of partyRows(); track row.id) {
+                <tr>
+                  <td>{{ day(row.date) }}</td>
+                  <td>{{ row.vehicle || '—' }}</td>
+                  <td>{{ row.owner || '—' }}</td>
+                  <td>{{ row.qty.toFixed(2) }}</td>
+                  <td>{{ row.withRent ? 'With' : 'W/O' }}</td>
+                  <td>{{ inr(calc(row).quarryAmount) }}</td>
+                  <td>{{ inr(calc(row).billAmount) }}</td>
+                </tr>
+              }
+            </tbody>
+            <tfoot>
+              <tr>
+                <td>Total</td>
+                <td></td>
+                <td></td>
+                <td>{{ statement().qty.toFixed(2) }}</td>
+                <td></td>
+                <td>{{ inr(statement().quarryPayable) }}</td>
+                <td>{{ inr(statement().receivable) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        }
+      </section>
+    }
+  </div>
 </div>

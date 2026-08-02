@@ -57,7 +57,16 @@
   </button>
 </header>
 
-<mat-sidenav-container class="app-shell">
+<!--
+  `autosize` makes the container re-measure the drawer when the rail collapses,
+  so the content genuinely gains the width. The rail class raises the page cap
+  (see `.app-shell--rail` in styles.scss).
+-->
+<mat-sidenav-container
+  class="app-shell"
+  autosize
+  [class.app-shell--rail]="collapsed() && !isHandset()"
+>
   <mat-sidenav
     class="app-sidenav"
     [class.app-sidenav--rail]="collapsed() && !isHandset()"
@@ -87,19 +96,30 @@
 
       <mat-menu #accountMenu="matMenu">
         @for (account of accounts.accounts(); track account.id) {
-          <button
-            mat-menu-item
-            type="button"
-            (click)="switchAccount(account)"
-            [attr.data-testid]="'account-item-' + account.id"
-          >
-            <mat-icon>{{
-              account.id === accounts.active().id
-                ? 'radio_button_checked'
-                : 'radio_button_unchecked'
-            }}</mat-icon>
-            <span>{{ account.name }}</span>
-          </button>
+          <div class="account-menu-row">
+            <button
+              mat-menu-item
+              type="button"
+              (click)="switchAccount(account)"
+              [attr.data-testid]="'account-item-' + account.id"
+            >
+              <mat-icon>{{
+                account.id === accounts.active().id
+                  ? 'radio_button_checked'
+                  : 'radio_button_unchecked'
+              }}</mat-icon>
+              <span>{{ account.name }}</span>
+            </button>
+            <button
+              class="account-menu-row__rename"
+              type="button"
+              (click)="renameAccount(account, $event)"
+              [attr.aria-label]="'Rename ' + account.name"
+              [attr.data-testid]="'account-rename-' + account.id"
+            >
+              <mat-icon>edit</mat-icon>
+            </button>
+          </div>
         }
         <button mat-menu-item type="button" (click)="createAccount()" data-testid="account-new">
           <mat-icon>add</mat-icon>

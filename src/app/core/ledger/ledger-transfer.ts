@@ -202,6 +202,10 @@ export class LedgerTransfer {
         ? (doc['vehicles'] as Record<string, unknown>[]).map(normaliseVehicle)
         : undefined,
       settings: normaliseSettings(doc['settings']),
+      // Staged entry-sheet rows; absent from backups made before drafts existed.
+      drafts: Array.isArray(doc['drafts'])
+        ? (doc['drafts'] as Record<string, unknown>[]).map(normaliseRow).filter((r) => r.id !== '')
+        : undefined,
     };
   }
 

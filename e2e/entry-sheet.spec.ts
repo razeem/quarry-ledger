@@ -1,5 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
-import { delaySeedChunks, saveEntry, setCrusher } from './helpers';
+import {
+  delaySeedChunks,
+  expectLoadCount,
+  saveEntry,
+  SEED_ROWS,
+  setCrusher,
+  syncDrafts,
+  waitForToast,
+} from './helpers';
 
 /**
  * The spreadsheet-style entry row, and printing the reports.
@@ -83,20 +91,23 @@ test.describe('sheet entry row', () => {
     await page.getByTestId('entry-qty').fill('10');
     await saveEntry(page);
 
-    // 10 t x ₹700 = ₹7,000 quary amount, from the typed rate rather than the chart's 610.
-    const sheet = page.locator('.sheet__saved').first();
-    await expect(sheet).toContainText('700');
+    // The staged row carries the typed rate rather than the chart's 610.
+    await expect(page.locator('[data-testid^="draft-quaryRate-"]').first()).toHaveValue('700');
   });
 
-  test('changing crusher drops a stale override so new chart rates apply', async ({ page }) => {
+  test('an edited rate survives a crusher change; untouched cells re-populate', async ({
+    page,
+  }) => {
     await page.goto('/entry');
     await setCrusher(page, 'Riverside Crusher');
-    await page.getByTestId('entry-quary-rate').fill('999');
-    await expect(page.getByTestId('entry-quary-rate')).toHaveValue('999');
+    const crusherRateBefore = await page.getByTestId('entry-crusher-rate').inputValue();
 
-    // A different crusher means different chart rates; the old override must not stick.
+    // Type over the quary rate, then switch crusher: the edited cell must stay
+    // put (edited always beats autofill), while untouched cells re-resolve.
+    await page.getByTestId('entry-quary-rate').fill('999');
     await page.getByTestId('entry-crusher').fill('Eastfield Metal Crusher');
-    await expect(page.getByTestId('entry-quary-rate')).not.toHaveValue('999');
+    await expect(page.getByTestId('entry-quary-rate')).toHaveValue('999');
+    await expect(page.getByTestId('entry-crusher-rate')).not.toHaveValue(crusherRateBefore);
   });
 
   test('an added row lands on the stack above the entry row', async ({ page }) => {
@@ -137,7 +148,8 @@ test.describe('sheet entry row', () => {
     await expect(page.locator('.sheet__saved')).toHaveCount(2);
     const flagged = page.locator('.sheet__saved--differs');
     await expect(flagged).toHaveCount(1);
-    await expect(flagged).toHaveText('777');
+    // A draft cell is a live input, so the flagged value is its value.
+    await expect(flagged.locator('input')).toHaveValue('777');
     // The legend counts it too.
     await expect(page.locator('body')).toContainText('Differs from the chart');
   });
@@ -198,7 +210,7 @@ test.describe('sheet entry row', () => {
 
     await expect(page.getByTestId('entry-qty')).toHaveValue('');
     await expect(page.locator('.sheet__saved')).toHaveCount(1);
-    await expect(page.locator('.sheet__saved').first()).toContainText('610');
+    await expect(page.locator('[data-testid^="draft-quaryRate-"]').first()).toHaveValue('610');
   });
 
   test('the grid scrolls sideways but the page does not, even at 375px', async ({ page }) => {
@@ -239,6 +251,81 @@ test.describe('sheet entry row', () => {
     // The vehicle cell is far to the right of a 375px viewport.
     await page.getByTestId('entry-vehicle').focus();
     await expect.poll(scrollLeft, { timeout: 5000 }).toBeGreaterThan(0);
+  });
+});
+
+test.describe('drafts, inline actions and sync', () => {
+  test('a crusher-less load stages as a flagged draft and is held from sync', async ({
+    page,
+  }) => {
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    // No crusher at all — the quarry's raw data arrives without one.
+    await page.getByTestId('entry-qty').fill('14');
+    await saveEntry(page);
+
+    // Staged as a draft with an empty (editable) crusher cell, and not syncable.
+    await expect(page.locator('.sheet__saved--draft')).toHaveCount(1);
+    await expect(page.locator('[data-testid^="draft-crusher-"]').first()).toHaveValue('');
+    await expect(page.getByTestId('entry-sync-drafts')).toBeDisabled();
+    await expect(page.getByTestId('entry-held-note')).toContainText('1 draft');
+
+    // Durable like everything else: still there after a reload.
+    await page.reload();
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await expect(page.locator('.sheet__saved--draft')).toHaveCount(1);
+
+    // And the Ledger has NOT gained a row.
+    await page.goto('/ledger');
+    await page.getByTestId('ledger-show-all').click();
+    await expectLoadCount(page, SEED_ROWS);
+  });
+
+  test('completing a draft inline and syncing moves it to the ledger', async ({ page }) => {
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await page.getByTestId('entry-qty').fill('14');
+    await saveEntry(page);
+    await expect(page.locator('.sheet__saved--draft')).toHaveCount(1);
+
+    // Draft cells are live: typing the crusher INTO THE ROW autofills its
+    // rates from the chart — no pencil, no separate edit step.
+    await page.locator('[data-testid^="draft-crusher-"]').first().fill('Riverside Crusher');
+    await expect(page.locator('[data-testid^="draft-quaryRate-"]').first()).toHaveValue('610');
+    await page.keyboard.press('Escape'); // close the type-ahead panel
+
+    // Complete now — one syncable draft, no held note.
+    await expect(page.getByTestId('entry-sync-drafts')).toBeEnabled();
+    await expect(page.getByTestId('entry-sync-drafts')).toContainText('Save 1 to ledger');
+    await syncDrafts(page);
+
+    // The draft chip is gone (the row is a ledger row on the sheet now)...
+    await expect(page.locator('.sheet__saved--draft')).toHaveCount(0);
+    await expect(page.locator('.sheet__saved')).toHaveCount(1);
+    // ...and the Ledger tab counts it.
+    await page.goto('/ledger');
+    await page.getByTestId('ledger-show-all').click();
+    await expectLoadCount(page, SEED_ROWS + 1);
+  });
+
+  test('deleting a row from the sheet can be undone with the same id', async ({ page }) => {
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await setCrusher(page, 'Riverside Crusher');
+    await page.getByTestId('entry-qty').fill('9');
+    await saveEntry(page);
+
+    const savedRow = page.locator('.sheet__saved').first();
+    const rowTestId = await savedRow.getAttribute('data-testid');
+    expect(rowTestId).toBeTruthy();
+
+    await page.locator('[data-testid^="entry-row-delete-"]').first().click();
+    await waitForToast(page, 'Draft deleted');
+    await expect(page.locator('.sheet__saved')).toHaveCount(0);
+
+    // Undo restores the identical row — same data-testid means same id.
+    await page.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByTestId(rowTestId!)).toBeVisible();
   });
 });
 

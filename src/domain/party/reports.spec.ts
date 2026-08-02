@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { partyRatePrefill } from './rates';
 import {
+  filterPartyRows,
   groupPartyRowsByDay,
+  lastActivePartyDateRange,
   ownerRentLines,
   partyStatement,
   reconcileQty,
+  sortPartyRowsByDateDesc,
 } from './reports';
 import { mergePartyRows, partyRowsEqual } from './merge';
 import type { PartyLedgerRow, PartyRateConfig } from './types';
@@ -136,5 +139,66 @@ describe('mergePartyRows', () => {
     const result = mergePartyRows([], [row({ id: '' })]);
     expect(result.report.skipped).toBe(1);
     expect(result.rows).toHaveLength(0);
+  });
+});
+
+describe('filterPartyRows', () => {
+  const rows = [
+    row({ id: 'a', date: '2025-10-20', party: 'Lakeside Crushers', withRent: true }),
+    row({ id: 'b', date: '2025-10-22', party: 'Summit Stone', withRent: false, owner: 'Ratheeesh 8334' }),
+    row({ id: 'c', date: '2025-11-01', party: 'Lakeside Crushers', withRent: false, vehicle: 'KL00BA4183' }),
+  ];
+
+  it('every criterion empty means every row', () => {
+    expect(filterPartyRows(rows, {})).toHaveLength(3);
+  });
+
+  it('combines date range, party and rent mode', () => {
+    const filtered = filterPartyRows(rows, {
+      from: '2025-10-01',
+      to: '2025-10-31',
+      party: 'Lakeside Crushers',
+      rentMode: 'with',
+    });
+    expect(filtered.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('matches owner exactly — spelling drift stays two distinct owners', () => {
+    // The seed deliberately keeps `Ratheeesh 8334` (rows) vs ` Ratheesh 8334`.
+    expect(filterPartyRows(rows, { owner: 'Ratheeesh 8334' }).map((r) => r.id)).toEqual(['b']);
+    expect(filterPartyRows(rows, { owner: ' Ratheesh 8334' })).toEqual([]);
+  });
+
+  it('vehicle matches a raw substring across spacing variants', () => {
+    expect(filterPartyRows(rows, { vehicle: '4183' }).map((r) => r.id)).toEqual(['c']);
+    expect(filterPartyRows(rows, { vehicle: 'KL 00 BA' })).toEqual([]);
+  });
+
+  it('tolerates a reversed date range', () => {
+    expect(filterPartyRows(rows, { from: '2025-11-01', to: '2025-10-20' })).toHaveLength(3);
+  });
+});
+
+describe('sortPartyRowsByDateDesc', () => {
+  it('orders newest first, keeps entry order within a day, never mutates', () => {
+    const rows = [
+      row({ id: 'a', date: '2025-10-20' }),
+      row({ id: 'b', date: '2025-11-01' }),
+      row({ id: 'c', date: '2025-10-20' }),
+    ];
+    expect(sortPartyRowsByDateDesc(rows).map((r) => r.id)).toEqual(['b', 'a', 'c']);
+    expect(rows.map((r) => r.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('lastActivePartyDateRange', () => {
+  it('spans the most recent active dates and is null with no rows', () => {
+    const rows = [
+      row({ id: 'a', date: '2025-10-20' }),
+      row({ id: 'b', date: '2025-10-22' }),
+      row({ id: 'c', date: '2025-11-01' }),
+    ];
+    expect(lastActivePartyDateRange(rows, 2)).toEqual(['2025-10-22', '2025-11-01']);
+    expect(lastActivePartyDateRange([], 5)).toBeNull();
   });
 });

@@ -4,10 +4,12 @@ import goldenTotals from '@data/golden-totals.json';
 import {
   crusherReport,
   dailyReport,
+  filterLedgerRows,
   groupByDay,
   lastActiveDateRange,
   monthlyReport,
   rowsInRange,
+  sortByDateDesc,
   vehicleRentReport,
 } from './reports';
 import { summarize } from './summaries';
@@ -233,5 +235,73 @@ describe('rowsInRange', () => {
 
   it('is empty outside the data', () => {
     expect(rowsInRange(ROWS, '1999-01-01', '1999-12-31')).toEqual([]);
+  });
+});
+
+describe('filterLedgerRows', () => {
+  it('every criterion empty means every row', () => {
+    expect(filterLedgerRows(ROWS, {})).toHaveLength(ROWS.length);
+  });
+
+  it('combines date range, crusher, pass type and vehicle', () => {
+    const filtered = filterLedgerRows(ROWS, {
+      from: '2026-07-29',
+      to: '2026-07-29',
+      crusher: 'Riverside Crusher',
+      passType: 'WO Pass',
+    });
+    expect(filtered.length).toBeGreaterThan(0);
+    expect(
+      filtered.every(
+        (r) =>
+          r.date === '2026-07-29' && r.crusher === 'Riverside Crusher' && r.passType === 'WO Pass',
+      ),
+    ).toBe(true);
+  });
+
+  it('matches crusher exactly, never fuzzily', () => {
+    expect(filterLedgerRows(ROWS, { crusher: 'Riverside' })).toEqual([]);
+  });
+
+  it("selects the real data's passType: null row via the 'null' sentinel", () => {
+    const filtered = filterLedgerRows(ROWS, { passType: 'null' });
+    expect(filtered.length).toBeGreaterThan(0);
+    expect(filtered.every((r) => r.passType === null)).toBe(true);
+  });
+
+  it('vehicle matches a raw substring, so spacing variants are all reachable', () => {
+    // The seed writes the same vehicle as `KL00T5450` and `KL 00 T 5450`;
+    // neither full form matches both, but the shared digits do.
+    const rows = [row({ vehicle: 'KL00T5450' }), row({ vehicle: 'KL 00 T 5450' })];
+    expect(filterLedgerRows(rows, { vehicle: '5450' })).toHaveLength(2);
+    expect(filterLedgerRows(rows, { vehicle: 'KL00T' })).toHaveLength(1);
+    // No normalisation: a spaced query must not match the unspaced plate.
+    expect(filterLedgerRows(rows, { vehicle: 'KL 00 T' })).toHaveLength(1);
+  });
+
+  it('handles an open-ended date range', () => {
+    const since = filterLedgerRows(ROWS, { from: '2026-07-01' });
+    expect(since.length).toBeGreaterThan(0);
+    expect(since.every((r) => r.date >= '2026-07-01')).toBe(true);
+    const until = filterLedgerRows(ROWS, { to: '2025-12-31' });
+    expect(until.length).toBeGreaterThan(0);
+    expect(until.every((r) => r.date <= '2025-12-31')).toBe(true);
+  });
+});
+
+describe('sortByDateDesc', () => {
+  it('orders newest date first and keeps entry order within a day', () => {
+    const rows = [
+      row({ id: 'a', date: '2026-03-06' }),
+      row({ id: 'b', date: '2026-07-29' }),
+      row({ id: 'c', date: '2026-03-06' }),
+    ];
+    expect(sortByDateDesc(rows).map((r) => r.id)).toEqual(['b', 'a', 'c']);
+  });
+
+  it('does not mutate its input', () => {
+    const rows = [row({ id: 'a', date: '2026-03-06' }), row({ id: 'b', date: '2026-07-29' })];
+    sortByDateDesc(rows);
+    expect(rows.map((r) => r.id)).toEqual(['a', 'b']);
   });
 });

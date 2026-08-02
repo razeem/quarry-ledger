@@ -63,6 +63,8 @@ export const GOLDEN_ALL_TIME_DISCOUNT = '74,354';
 export async function setCrusher(page: Page, name: string): Promise<void> {
   await page.getByTestId('entry-crusher').fill(name);
   await expect(page.getByTestId('entry-quary-rate')).not.toHaveValue('0');
+  // Close the type-ahead panel so it never sits over the next click target.
+  await page.keyboard.press('Escape');
 }
 
 // --- Party ledger ------------------------------------------------------------
@@ -93,12 +95,24 @@ export async function openPartyBook(page: Page): Promise<void> {
 export async function setParty(page: Page, name: string): Promise<void> {
   await page.getByTestId('party-entry-party').fill(name);
   await expect(page.getByTestId('party-entry-quary-rate')).not.toHaveValue('0');
+  // Close the type-ahead panel so it never sits over the next click target.
+  await page.keyboard.press('Escape');
 }
 
 /** Save the party entry form; the cleared quantity is the durability signal. */
 export async function savePartyEntry(page: Page): Promise<void> {
   await page.getByTestId('party-entry-save').click();
   await expect(page.getByTestId('party-entry-qty')).toHaveValue('');
+}
+
+/**
+ * Move every complete party draft into the book's ledger. New rows stage as
+ * durable drafts on the entry sheet; statements/reports only see synced rows.
+ * The toast appears only after both writes have landed.
+ */
+export async function syncPartyDrafts(page: Page): Promise<void> {
+  await page.getByTestId('party-entry-sync-drafts').click();
+  await waitForToast(page, /saved to ledger/);
 }
 
 /**
@@ -114,8 +128,18 @@ export async function saveEntry(page: Page): Promise<void> {
 }
 
 /**
- * Save an edit and wait for the write to land. Updating returns to the Ledger, so
- * arriving there is the durability signal.
+ * Move every complete daily draft into the base ledger. New rows stage as
+ * durable drafts on the entry sheet; the Ledger tab and reports only see
+ * synced rows. The toast appears only after both writes have landed.
+ */
+export async function syncDrafts(page: Page): Promise<void> {
+  await page.getByTestId('entry-sync-drafts').click();
+  await waitForToast(page, /saved to ledger/);
+}
+
+/**
+ * Save a Ledger-tab edit and wait for the write to land. A `?edit=` edit
+ * returns to the Ledger, so arriving there is the durability signal.
  */
 export async function saveEdit(page: Page): Promise<void> {
   await page.getByTestId('entry-save').click();

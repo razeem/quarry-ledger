@@ -2,6 +2,8 @@
 // The app's OWN design tokens are the source of truth and are BRIDGED onto
 // Material's `--mat-sys-*` tokens so Material components adopt the same palette.
 @use '@angular/material' as mat;
+// Spreadsheet-style entry grid, shared by the daily and party entry sheets.
+@use 'styles/sheet';
 
 html {
   color-scheme: light dark;
@@ -193,6 +195,12 @@ body::before {
 // sidebar genuinely buys more columns.
 .app-page--wide {
   max-width: none;
+}
+
+// Collapsing the sidebar to its rail reclaims 182px (256 − 74); hand exactly
+// that to capped pages too, so the collapse visibly widens every page.
+.app-shell--rail .app-page {
+  max-width: calc(var(--app-page-max) + 182px);
 }
 
 // "Data console" numerals — mono + tabular so figures line up in columns/tiles.
