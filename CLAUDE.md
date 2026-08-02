@@ -163,10 +163,21 @@ above it, and the grid scrolls sideways inside its own box (the page never does,
   snapshot) or `edited` (typed over). Saved rows highlight any rate that no longer matches
   the chart — which means "differs from today's chart", since a row does not record
   whether it was typed over or the chart changed later.
-- **Draft rows are live cells** — every field edits in place (no pencil), each change
-  persisting through `updateDraft`. A crusher/party typed into a draft re-resolves the
-  chart/setup for its untouched rate cells only (`draftRatePatch`). Synced ledger rows
-  stay read-only on the sheet; their pencil loads the entry row deliberately.
+- **Every row on the sheet is live cells** — staged drafts and rows already in the ledger
+  alike. Each field edits in place and persists immediately through `patchCell`, which
+  routes to `updateDraft` or `updateRow` by row kind. A crusher/party typed into any row
+  re-resolves the chart/setup for its untouched rate cells only (`chartRatePatch` /
+  `setupRatePatch`). Ledger rows are still marked distinctly (no draft chip) and keep
+  their pencil, which loads the entry row below — a second way in, not the only one.
+  - They were read-only at first, reasoning that changing something already in the book
+    should be deliberate. The client reported that as broken: the sheet shows the day's
+    rows, so people expect to correct one where they can see it.
+  - Cell testids are prefixed `draft-` or `row-` (`SavedRowView.prefix`), so e2e can still
+    tell staged from committed.
+  - **An inline edit is fire-and-forget** (`void updateRow(...)`), and the app is zoneless,
+    so a Playwright `fill()` returns before the handler has even run. In e2e, wait on a
+    value DERIVED from the store (an amount cell) before reloading — never assert the
+    input you just typed into, which proves nothing about what was stored.
 - Deleting any row (draft or synced) goes through `deleteRowWithUndo`, so every delete is
   undoable and the undo restores the ORIGINAL id.
 - The crusher/party/vehicle pickers are `mat-autocomplete` + the shared

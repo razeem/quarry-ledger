@@ -65,145 +65,130 @@
                 [class.sheet__saved--draft]="view.kind === 'draft'"
                 [attr.data-testid]="'party-saved-' + view.row.id"
               >
-                <!-- Draft rows are LIVE cells: every change persists directly, no
-                     pencil needed. Enter is swallowed in them so it never
-                     re-submits the entry row while an editor works up here. -->
-                @if (view.kind === 'draft') {
-                  <td class="sheet__editcell">
-                    <input
-                      class="sheet__cell"
-                      type="date"
-                      [ngModel]="view.row.date"
-                      (ngModelChange)="patchDraft(view.row, { date: $event })"
-                      [ngModelOptions]="{ standalone: true }"
-                      (keydown.enter)="$event.preventDefault()"
-                      (focus)="revealCell($event)"
-                      aria-label="Draft date"
-                      [attr.data-testid]="'party-draft-date-' + view.row.id"
-                    />
-                  </td>
-                  <td class="sheet__editcell">
-                    <input
-                      class="sheet__cell"
-                      type="text"
-                      autocomplete="off"
-                      placeholder="Party"
-                      [ngModel]="view.row.party"
-                      (ngModelChange)="patchDraftParty(view.row, $event)"
-                      [ngModelOptions]="{ standalone: true }"
-                      [matAutocomplete]="draftPartyAuto"
-                      (keydown.enter)="$event.preventDefault()"
-                      (focus)="revealCell($event)"
-                      aria-label="Draft party"
-                      [attr.data-testid]="'party-draft-party-' + view.row.id"
-                    />
-                    <mat-autocomplete #draftPartyAuto="matAutocomplete">
-                      @for (name of filterParties(view.row.party); track name) {
-                        <mat-option [value]="name">{{ name }}</mat-option>
-                      }
-                    </mat-autocomplete>
-                  </td>
-                  <td class="sheet__editcell">
+                <!-- Every row is LIVE cells - draft or already in the ledger.
+                     Each change persists directly; Enter is swallowed so it
+                     never re-submits the entry row while an editor works here. -->
+                <td class="sheet__editcell">
+                  <input
+                    class="sheet__cell"
+                    type="date"
+                    [ngModel]="view.row.date"
+                    (ngModelChange)="patchCell(view, { date: $event })"
+                    [ngModelOptions]="{ standalone: true }"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    aria-label="Date"
+                    [attr.data-testid]="'party-' + view.prefix + 'date-' + view.row.id"
+                  />
+                </td>
+                <td class="sheet__editcell">
+                  <input
+                    class="sheet__cell"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Party"
+                    [ngModel]="view.row.party"
+                    (ngModelChange)="patchParty(view, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    [matAutocomplete]="rowPartyAuto"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    aria-label="Party"
+                    [attr.data-testid]="'party-' + view.prefix + 'party-' + view.row.id"
+                  />
+                  <mat-autocomplete #rowPartyAuto="matAutocomplete">
+                    @for (name of filterParties(view.row.party); track name) {
+                      <mat-option [value]="name">{{ name }}</mat-option>
+                    }
+                  </mat-autocomplete>
+                </td>
+                <td class="sheet__editcell">
+                  <input
+                    class="sheet__cell sheet__cell--num"
+                    type="number"
+                    inputmode="decimal"
+                    step="0.01"
+                    min="0"
+                    [ngModel]="view.row.qty"
+                    (ngModelChange)="patchQty(view, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    aria-label="Quantity"
+                    [attr.data-testid]="'party-' + view.prefix + 'qty-' + view.row.id"
+                  />
+                </td>
+                <td class="sheet__editcell">
+                  <select
+                    class="sheet__cell"
+                    [ngModel]="view.row.withRent"
+                    (ngModelChange)="patchRentMode(view, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    (focus)="revealCell($event)"
+                    aria-label="Rent mode"
+                    [attr.data-testid]="'party-' + view.prefix + 'rent-' + view.row.id"
+                  >
+                    <option [ngValue]="true">With</option>
+                    <option [ngValue]="false">W/O</option>
+                  </select>
+                </td>
+                <td class="sheet__editcell">
+                  <input
+                    class="sheet__cell"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="KL 00 ..."
+                    [ngModel]="view.row.vehicle"
+                    (ngModelChange)="patchVehicle(view, $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    [matAutocomplete]="rowVehicleAuto"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    aria-label="Vehicle"
+                    [attr.data-testid]="'party-' + view.prefix + 'vehicle-' + view.row.id"
+                  />
+                  <mat-autocomplete #rowVehicleAuto="matAutocomplete">
+                    @for (num of filterVehicles(view.row.vehicle); track num) {
+                      <mat-option [value]="num">{{ num }}</mat-option>
+                    }
+                  </mat-autocomplete>
+                </td>
+                <td class="sheet__editcell">
+                  <input
+                    class="sheet__cell"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="Owner"
+                    [ngModel]="view.row.owner"
+                    (ngModelChange)="patchCell(view, { owner: $event })"
+                    [ngModelOptions]="{ standalone: true }"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    aria-label="Owner"
+                    [attr.data-testid]="'party-' + view.prefix + 'owner-' + view.row.id"
+                  />
+                </td>
+                @for (rate of RATE_COLUMNS; track rate.field) {
+                  <td
+                    class="sheet__editcell"
+                    [class.sheet__saved--differs]="view.differs[rate.field]"
+                    [attr.title]="view.differs[rate.field] ? DIFFERS_HINT : null"
+                  >
                     <input
                       class="sheet__cell sheet__cell--num"
                       type="number"
                       inputmode="decimal"
-                      step="0.01"
+                      step="1"
                       min="0"
-                      [ngModel]="view.row.qty"
-                      (ngModelChange)="patchDraftQty(view.row, $event)"
+                      [disabled]="rate.field === 'rentRate' && !view.row.withRent"
+                      [ngModel]="view.row[rate.field]"
+                      (ngModelChange)="patchRate(view, rate.field, $event)"
                       [ngModelOptions]="{ standalone: true }"
                       (keydown.enter)="$event.preventDefault()"
                       (focus)="revealCell($event)"
-                      aria-label="Draft quantity"
-                      [attr.data-testid]="'party-draft-qty-' + view.row.id"
+                      [attr.aria-label]="rate.label"
+                      [attr.data-testid]="'party-' + view.prefix + rate.field + '-' + view.row.id"
                     />
-                  </td>
-                  <td class="sheet__editcell">
-                    <select
-                      class="sheet__cell"
-                      [ngModel]="view.row.withRent"
-                      (ngModelChange)="patchDraftRentMode(view.row, $event)"
-                      [ngModelOptions]="{ standalone: true }"
-                      (focus)="revealCell($event)"
-                      aria-label="Draft rent mode"
-                      [attr.data-testid]="'party-draft-rent-' + view.row.id"
-                    >
-                      <option [ngValue]="true">With</option>
-                      <option [ngValue]="false">W/O</option>
-                    </select>
-                  </td>
-                  <td class="sheet__editcell">
-                    <input
-                      class="sheet__cell"
-                      type="text"
-                      autocomplete="off"
-                      placeholder="KL 00 …"
-                      [ngModel]="view.row.vehicle"
-                      (ngModelChange)="patchDraftVehicle(view.row, $event)"
-                      [ngModelOptions]="{ standalone: true }"
-                      [matAutocomplete]="draftVehicleAuto"
-                      (keydown.enter)="$event.preventDefault()"
-                      (focus)="revealCell($event)"
-                      aria-label="Draft vehicle"
-                      [attr.data-testid]="'party-draft-vehicle-' + view.row.id"
-                    />
-                    <mat-autocomplete #draftVehicleAuto="matAutocomplete">
-                      @for (num of filterVehicles(view.row.vehicle); track num) {
-                        <mat-option [value]="num">{{ num }}</mat-option>
-                      }
-                    </mat-autocomplete>
-                  </td>
-                  <td class="sheet__editcell">
-                    <input
-                      class="sheet__cell"
-                      type="text"
-                      autocomplete="off"
-                      placeholder="Owner"
-                      [ngModel]="view.row.owner"
-                      (ngModelChange)="patchDraft(view.row, { owner: $event })"
-                      [ngModelOptions]="{ standalone: true }"
-                      (keydown.enter)="$event.preventDefault()"
-                      (focus)="revealCell($event)"
-                      aria-label="Draft owner"
-                      [attr.data-testid]="'party-draft-owner-' + view.row.id"
-                    />
-                  </td>
-                } @else {
-                  <td>{{ view.row.date }}</td>
-                  <td>{{ view.row.party }}</td>
-                  <td class="app-num text-right">{{ view.row.qty.toFixed(2) }}</td>
-                  <td>{{ view.row.withRent ? 'With' : 'W/O' }}</td>
-                  <td>{{ view.row.vehicle || '—' }}</td>
-                  <td>{{ view.row.owner || '—' }}</td>
-                }
-                @for (rate of RATE_COLUMNS; track rate.field) {
-                  <td
-                    [class.sheet__editcell]="view.kind === 'draft'"
-                    [class.app-num]="view.kind !== 'draft'"
-                    [class.text-right]="view.kind !== 'draft'"
-                    [class.sheet__saved--differs]="view.differs[rate.field]"
-                    [attr.title]="view.differs[rate.field] ? DIFFERS_HINT : null"
-                  >
-                    @if (view.kind === 'draft') {
-                      <input
-                        class="sheet__cell sheet__cell--num"
-                        type="number"
-                        inputmode="decimal"
-                        step="1"
-                        min="0"
-                        [disabled]="rate.field === 'rentRate' && !view.row.withRent"
-                        [ngModel]="view.row[rate.field]"
-                        (ngModelChange)="patchDraftRate(view.row, rate.field, $event)"
-                        [ngModelOptions]="{ standalone: true }"
-                        (keydown.enter)="$event.preventDefault()"
-                        (focus)="revealCell($event)"
-                        [attr.aria-label]="'Draft ' + rate.label"
-                        [attr.data-testid]="'party-draft-' + rate.field + '-' + view.row.id"
-                      />
-                    } @else {
-                      {{ view.row[rate.field] }}
-                    }
                   </td>
                 }
                 <td class="app-num text-right">{{ inr(view.calc.quarryAmount) }}</td>

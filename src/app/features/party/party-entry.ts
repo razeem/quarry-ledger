@@ -86,6 +86,8 @@ interface SavedRowView {
   kind: 'row' | 'draft';
   /** A draft still missing what it needs to sync (party / qty). */
   incomplete: boolean;
+  /** `data-testid` prefix for this row's cells — `draft-` or `row-`. */
+  prefix: 'draft-' | 'row-';
 }
 
 /** Today as ISO 'YYYY-MM-DD' in local time (never a UTC-shifted day). */
@@ -232,6 +234,7 @@ export class PartyEntry {
       return {
         row,
         kind,
+        prefix: kind === 'draft' ? ('draft-' as const) : ('row-' as const),
         incomplete: kind === 'draft' && !isPartyDraftComplete(row),
         calc: computePartyRow(row),
         comparable: prefill !== undefined,
@@ -456,46 +459,52 @@ export class PartyEntry {
     if (fromQuery) void this.router.navigate(['/party/statements']);
   }
 
-  // --- Inline draft editing ---------------------------------------------------
-  // Draft rows are live spreadsheet cells (see the daily sheet for rationale).
+  // --- Inline editing ----------------------------------------------------------
+  // Every row on the sheet is a live cell, staged or already in the book
+  // (see the daily sheet for the rationale).
 
-  protected patchDraft(row: PartyLedgerRow, patch: Partial<PartyLedgerRowDraft>): void {
-    void this.store.updateDraft(row.id, patch);
+  /** Route a cell edit to the right collection. Both are equally durable. */
+  protected patchCell(view: SavedRowView, patch: Partial<PartyLedgerRowDraft>): void {
+    if (view.kind === 'draft') void this.store.updateDraft(view.row.id, patch);
+    else void this.store.updateRow(view.row.id, patch);
   }
 
-  protected patchDraftQty(row: PartyLedgerRow, value: number | string): void {
+  protected patchQty(view: SavedRowView, value: number | string): void {
     const qty = Number(value);
-    this.patchDraft(row, { qty: Number.isFinite(qty) ? qty : 0 });
+    this.patchCell(view, { qty: Number.isFinite(qty) ? qty : 0 });
   }
 
-  protected patchDraftRate(row: PartyLedgerRow, field: RateField, value: number | string): void {
+  protected patchRate(view: SavedRowView, field: RateField, value: number | string): void {
     const parsed = Number(value);
-    this.patchDraft(row, { [field]: Number.isFinite(parsed) ? parsed : 0 });
+    this.patchCell(view, { [field]: Number.isFinite(parsed) ? parsed : 0 });
   }
 
-  /** A party typed into a draft re-resolves the setup, keeping edited cells. */
-  protected patchDraftParty(row: PartyLedgerRow, party: string): void {
-    this.patchDraft(row, { party, ...this.draftRatePatch(row, party, row.withRent) });
+  /** A party typed into a row re-resolves the setup, keeping edited cells. */
+  protected patchParty(view: SavedRowView, party: string): void {
+    this.patchCell(view, {
+      party,
+      ...this.setupRatePatch(view.row, party, view.row.withRent),
+    });
   }
 
-  protected patchDraftRentMode(row: PartyLedgerRow, withRent: boolean): void {
-    const patch = this.draftRatePatch(row, row.party, withRent);
+  protected patchRentMode(view: SavedRowView, withRent: boolean): void {
+    const patch = this.setupRatePatch(view.row, view.row.party, withRent);
     // Rent never applies without rent — the engine contract expects 0.
-    this.patchDraft(row, { withRent, ...patch, ...(withRent ? {} : { rentRate: 0 }) });
+    this.patchCell(view, { withRent, ...patch, ...(withRent ? {} : { rentRate: 0 }) });
   }
 
   /** Vehicle edits re-run the owner autofill, like the entry row does. */
-  protected patchDraftVehicle(row: PartyLedgerRow, vehicle: string): void {
+  protected patchVehicle(view: SavedRowView, vehicle: string): void {
     const owner = vehicleOwner(this.store.vehicles(), vehicle);
-    this.patchDraft(row, { vehicle, ...(owner ? { owner } : {}) });
+    this.patchCell(view, { vehicle, ...(owner ? { owner } : {}) });
   }
 
   /**
-   * The setup rates a party/mode change should apply to a draft — skipping any
+   * The setup rates a party/mode change should apply to a row — skipping any
    * cell that differs from its previous auto-filled value (i.e. was typed).
    * The profit split is not editable inline, so it always tracks the setup.
    */
-  private draftRatePatch(
+  private setupRatePatch(
     row: PartyLedgerRow,
     party: string,
     withRent: boolean,

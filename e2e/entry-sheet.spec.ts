@@ -308,6 +308,71 @@ test.describe('drafts, inline actions and sync', () => {
     await expectLoadCount(page, SEED_ROWS + 1);
   });
 
+  test('a row already in the ledger edits in place on the sheet', async ({ page }) => {
+    // The client's report: the sheet showed the day's saved rows but nothing on
+    // them could be corrected where it was visible. Ledger rows are now live
+    // cells exactly like drafts — the pencil is a second way in, not the only one.
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await setCrusher(page, 'Riverside Crusher');
+    await page.getByTestId('entry-qty').fill('9');
+    await saveEntry(page);
+    await syncDrafts(page);
+
+    // No draft chip left: this row is in the book.
+    await expect(page.locator('.sheet__saved--draft')).toHaveCount(0);
+
+    const qty = page.locator('[data-testid^="row-qty-"]').first();
+    await expect(qty).toHaveValue('9');
+    await page.locator('[data-testid^="row-vehicle-"]').first().fill('KL 00 Z 4242');
+    await page.keyboard.press('Escape');
+    await qty.fill('12');
+
+    // Wait for a value DERIVED from the store before reloading. `fill` returns
+    // as soon as the input event is dispatched, and this app is zoneless — the
+    // patch handler has not necessarily run yet, never mind reached IndexedDB.
+    // The row's amount cell is rendered from the stored row, so 12 x 900
+    // appearing proves the qty edit landed; the vehicle edit was dispatched
+    // first, so it is in that same persisted document.
+    await expect(page.locator('.sheet__saved').first()).toContainText('10,800');
+
+    // Durable, not just on screen. The sheet reopens on today, so come back to
+    // the date under test before asserting.
+    await page.reload();
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await expect(page.locator('[data-testid^="row-qty-"]').first()).toHaveValue('12');
+
+    // And the Ledger tab sees the same edit — one row, not a fork.
+    await page.goto('/ledger');
+    await page.getByTestId('ledger-show-all').click();
+    await expectLoadCount(page, SEED_ROWS + 1);
+    await expect(page.getByText('KL 00 Z 4242').first()).toBeVisible();
+  });
+
+  test('editing a ledger row re-resolves only its untouched rate cells', async ({ page }) => {
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await setCrusher(page, 'Riverside Crusher');
+    await page.getByTestId('entry-qty').fill('5');
+    await saveEntry(page);
+    await syncDrafts(page);
+
+    // Type over one rate, then change the crusher: the typed cell must survive
+    // and the untouched ones must re-populate. Same rule as drafts and the
+    // entry row — edited always beats autofill.
+    //
+    // Rent is the cell to assert on: Riverside WO Pass rents at 250 and
+    // Northgate at 0, whereas both quote the same 610 quary rate, so quary
+    // could not tell a re-resolve from a no-op.
+    await expect(page.locator('[data-testid^="row-rentRate-"]').first()).toHaveValue('250');
+    await page.locator('[data-testid^="row-crusherRate-"]').first().fill('999');
+    await page.locator('[data-testid^="row-crusher-"]').first().fill('Northgate Crusher');
+    await page.keyboard.press('Escape');
+
+    await expect(page.locator('[data-testid^="row-crusherRate-"]').first()).toHaveValue('999');
+    await expect(page.locator('[data-testid^="row-rentRate-"]').first()).toHaveValue('0');
+  });
+
   test('deleting a row from the sheet can be undone with the same id', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');

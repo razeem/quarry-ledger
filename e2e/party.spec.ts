@@ -223,6 +223,37 @@ test('deleting from the party Ledger can be undone, keeping the row count', asyn
   );
 });
 
+test('a party row already in the ledger edits in place on the sheet', async ({ page }) => {
+  // The party twin of the daily sheet's inline editing — same client report,
+  // same fix: a saved row is a live cell where it is visible.
+  await page.goto('/entry');
+  await openPartyBook(page);
+  await page.getByTestId('party-entry-date').fill('2026-07-30');
+  await setParty(page, 'Lakeside Crushers');
+  await page.getByTestId('party-entry-qty').fill('8');
+  await savePartyEntry(page);
+  await syncPartyDrafts(page);
+
+  await expect(page.locator('.sheet__saved--draft')).toHaveCount(0);
+
+  const qty = page.locator('[data-testid^="party-row-qty-"]').first();
+  await expect(qty).toHaveValue('8');
+  await qty.fill('11');
+  await page.locator('[data-testid^="party-row-owner-"]').first().fill('Ratheesh 8334');
+
+  // Durable: the sheet reopens on today, so return to the date under test.
+  await page.reload();
+  await page.getByTestId('party-entry-date').fill('2026-07-30');
+  await expect(page.locator('[data-testid^="party-row-qty-"]').first()).toHaveValue('11');
+
+  // One row, not a fork.
+  await page.getByTestId('nav-party/ledger').click();
+  await page.getByTestId('party-ledger-show-all').click();
+  await expect(page.getByTestId('party-ledger-summary')).toContainText(
+    `${PARTY_SEED_ROWS + 1} loads`,
+  );
+});
+
 test('prints the party reports with the golden totals', async ({ page }) => {
   await page.addInitScript(() => {
     (window as unknown as { __printCalls: number }).__printCalls = 0;

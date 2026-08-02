@@ -112,6 +112,14 @@ interface SavedRowView {
   kind: 'row' | 'draft';
   /** A draft still missing what it needs to sync (crusher / qty). */
   incomplete: boolean;
+  /**
+   * `data-testid` prefix for this row's cells — `draft-` or `row-`.
+   *
+   * Both kinds render the same live inputs, but the prefix keeps them
+   * distinguishable in e2e, where "is this staged or in the book?" is usually
+   * the thing under test.
+   */
+  prefix: 'draft-' | 'row-';
 }
 
 /** Today as ISO 'YYYY-MM-DD' in local time (never a UTC-shifted day). */
@@ -284,6 +292,7 @@ export class Entry {
       return {
         row,
         kind,
+        prefix: kind === 'draft' ? ('draft-' as const) : ('row-' as const),
         incomplete: kind === 'draft' && !isDraftComplete(row),
         calc: computeRow(row),
         comparable: prefill !== undefined,
@@ -518,42 +527,55 @@ export class Entry {
     if (fromQuery) void this.router.navigate(['/ledger']);
   }
 
-  // --- Inline draft editing ---------------------------------------------------
+  // --- Inline editing ----------------------------------------------------------
   //
-  // Draft rows are live spreadsheet cells: every change lands in the store
-  // directly (durable via updateDraft), no pencil needed. Only synced LEDGER
-  // rows keep the explicit edit flow — they are in the book already, so
-  // changing them stays a deliberate action.
+  // Every row on the sheet is a live spreadsheet cell — staged drafts and rows
+  // already in the base ledger alike. A change lands in the store directly and
+  // durably; there is no separate "edit mode" to enter first.
+  //
+  // Ledger rows were read-only here at first, on the reasoning that changing
+  // something already in the book should be deliberate. In practice that read
+  // as broken: the sheet shows the day's rows, so people expect to correct one
+  // where they see it. The pencil still works and still loads the row into the
+  // entry row below — it is now a second way in, not the only one.
 
-  protected patchDraft(row: LedgerRow, patch: Partial<LedgerRowDraft>): void {
-    void this.store.updateDraft(row.id, patch);
+  /** Route a cell edit to the right collection. Both are equally durable. */
+  protected patchCell(view: SavedRowView, patch: Partial<LedgerRowDraft>): void {
+    if (view.kind === 'draft') void this.store.updateDraft(view.row.id, patch);
+    else void this.store.updateRow(view.row.id, patch);
   }
 
-  protected patchDraftQty(row: LedgerRow, value: number | string): void {
+  protected patchQty(view: SavedRowView, value: number | string): void {
     const qty = Number(value);
-    this.patchDraft(row, { qty: Number.isFinite(qty) ? qty : 0 });
+    this.patchCell(view, { qty: Number.isFinite(qty) ? qty : 0 });
   }
 
-  protected patchDraftRate(row: LedgerRow, field: RateField, value: number | string): void {
+  protected patchRate(view: SavedRowView, field: RateField, value: number | string): void {
     const parsed = Number(value);
-    this.patchDraft(row, { [field]: Number.isFinite(parsed) ? parsed : 0 });
+    this.patchCell(view, { [field]: Number.isFinite(parsed) ? parsed : 0 });
   }
 
-  /** A crusher typed into a draft re-resolves the chart, like the entry row. */
-  protected patchDraftCrusher(row: LedgerRow, crusher: string): void {
-    this.patchDraft(row, { crusher, ...this.draftRatePatch(row, crusher, row.passType) });
+  /** A crusher typed into a row re-resolves the chart, like the entry row. */
+  protected patchCrusher(view: SavedRowView, crusher: string): void {
+    this.patchCell(view, {
+      crusher,
+      ...this.chartRatePatch(view.row, crusher, view.row.passType),
+    });
   }
 
-  protected patchDraftPassType(row: LedgerRow, passType: PassType): void {
-    this.patchDraft(row, { passType, ...this.draftRatePatch(row, row.crusher, passType) });
+  protected patchPassType(view: SavedRowView, passType: PassType): void {
+    this.patchCell(view, {
+      passType,
+      ...this.chartRatePatch(view.row, view.row.crusher, passType),
+    });
   }
 
   /**
-   * The chart rates a crusher/pass change should apply to a draft — skipping
-   * any cell whose value differs from what would have been auto-filled before,
+   * The chart rates a crusher/pass change should apply to a row — skipping any
+   * cell whose value differs from what would have been auto-filled before,
    * i.e. one the user typed. Edited cells always beat autofill (client rule).
    */
-  private draftRatePatch(
+  private chartRatePatch(
     row: LedgerRow,
     crusher: string,
     passType: PassType | null,
