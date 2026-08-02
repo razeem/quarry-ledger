@@ -7,8 +7,11 @@ export interface UndoableDelete {
   doDelete: () => Promise<void>;
   /**
    * Undo. Must restore the row under its ORIGINAL id — in practice always
-   * `store.mergeImport({ rows: [row] })` + `store.flush()`, never `addRow`
-   * (which would mint a new id and break the cross-device merge key).
+   * `store.restoreRow(row)` / `store.restoreDraft(row)`, never `addRow` (which
+   * would mint a new id and break the cross-device merge key).
+   *
+   * Those two also re-stamp `updatedAt`, without which the revived row would
+   * lose to its own tombstone and Undo would quietly do nothing.
    */
   restore: () => void | Promise<void>;
 }

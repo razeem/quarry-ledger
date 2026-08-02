@@ -14,7 +14,7 @@ import {
   mergePartyRates,
   mergePartyRows,
 } from '../../../domain/party/merge';
-import { mergeVehicles, type MergeReport } from '../../../domain/merge';
+import { mergeVehicles, revive, type MergeReport } from '../../../domain/merge';
 
 /**
  * The party ledger's persistence facade — one instance serves every party book,
@@ -48,11 +48,12 @@ interface PartySeedDoc {
  * by base name; the stored key carries the `acc:<id>:` prefix per account).
  */
 export const PARTY_COLLECTION_VERSIONS = {
-  'party-rows': 1,
+  // v1 -> v2 added the optional `updatedAt` / `deleted` sync fields to each row.
+  'party-rows': 2,
   'party-rates': 1,
   'party-vehicles': 1,
   'party-seed': 1,
-  'party-entry-drafts': 1,
+  'party-entry-drafts': 2,
 } as const;
 
 export type PartyLedgerRowDraft = Omit<PartyLedgerRow, 'id'>;
@@ -168,9 +169,26 @@ export class PartyLedgerStore {
     );
   });
 
-  readonly rows = computed(() => this.activeCols().rows.value().rows);
-  /** Staged entry-sheet rows awaiting `syncDrafts()`, per book. */
-  readonly drafts = computed(() => this.activeCols().drafts.value().rows);
+  /**
+   * Every stored row of the active book, tombstones included — the merge,
+   * transfer and sync surface. Anything writing the whole collection back must
+   * read this, not `rows()`; see the daily store for why.
+   */
+  readonly rowsWithTombstones = computed(() => this.activeCols().rows.value().rows);
+  /** The live rows. Tombstones are invisible above the store. */
+  readonly rows = computed(() => this.rowsWithTombstones().filter((row) => !row.deleted));
+
+  /** Staged rows, tombstones included — the transfer and sync surface. */
+  readonly draftsWithTombstones = computed(() => this.activeCols().drafts.value().rows);
+  /**
+   * Staged entry-sheet rows awaiting `syncDrafts()`, per book. A draft whose id
+   * already exists in the book's rows is filtered out, so graduation stays
+   * idempotent when the sync happened on another device.
+   */
+  readonly drafts = computed(() => {
+    const synced = new Set(this.rowsWithTombstones().map((row) => row.id));
+    return this.draftsWithTombstones().filter((row) => !row.deleted && !synced.has(row.id));
+  });
   readonly rates = computed(() => this.activeCols().rates.value().entries);
   readonly vehicles = computed(() => this.activeCols().vehicles.value().list);
 
@@ -193,12 +211,13 @@ export class PartyLedgerStore {
     return this.drafts().find((row) => row.id === id);
   }
 
+  /** The whole book for backup / transfer — tombstones included, so deletes travel. */
   snapshot(): PartyLedgerSnapshot {
     return {
-      rows: this.rows(),
+      rows: this.rowsWithTombstones(),
       rates: this.rates(),
       vehicles: this.vehicles(),
-      drafts: this.drafts(),
+      drafts: this.draftsWithTombstones(),
     };
   }
 
@@ -261,7 +280,7 @@ export class PartyLedgerStore {
 
   /** Append a row with a fresh immutable id; resolves once it is on disk. */
   async addRow(draft: PartyLedgerRowDraft): Promise<PartyLedgerRow> {
-    const row: PartyLedgerRow = { ...draft, id: newRowId() };
+    const row: PartyLedgerRow = { ...draft, id: newRowId(), updatedAt: Date.now() };
     const cols = this.activeCols();
     cols.rows.update((doc) => ({ rows: [...doc.rows, row] }));
     await cols.rows.flush();
@@ -271,16 +290,24 @@ export class PartyLedgerStore {
   /** Patch a row in place (id immutable); resolves once the change is on disk. */
   async updateRow(id: string, patch: Partial<PartyLedgerRowDraft>): Promise<void> {
     const cols = this.activeCols();
+    const now = Date.now();
     cols.rows.update((doc) => ({
-      rows: doc.rows.map((row) => (row.id === id ? { ...row, ...patch, id: row.id } : row)),
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, ...patch, id: row.id, updatedAt: now } : row,
+      ),
     }));
     await cols.rows.flush();
   }
 
-  /** Remove a row; resolves once the deletion is on disk. */
+  /** Delete a row by tombstoning it, so the delete travels instead of being local. */
   async deleteRow(id: string): Promise<void> {
     const cols = this.activeCols();
-    cols.rows.update((doc) => ({ rows: doc.rows.filter((row) => row.id !== id) }));
+    const now = Date.now();
+    cols.rows.update((doc) => ({
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, deleted: true, updatedAt: now } : row,
+      ),
+    }));
     await cols.rows.flush();
   }
 
@@ -290,7 +317,7 @@ export class PartyLedgerStore {
 
   /** Stage a row with a fresh immutable id; resolves once it is on disk. */
   async addDraft(draft: PartyLedgerRowDraft): Promise<PartyLedgerRow> {
-    const row: PartyLedgerRow = { ...draft, id: newRowId() };
+    const row: PartyLedgerRow = { ...draft, id: newRowId(), updatedAt: Date.now() };
     const cols = this.activeCols();
     cols.drafts.update((doc) => ({ rows: [...doc.rows, row] }));
     await cols.drafts.flush();
@@ -300,23 +327,40 @@ export class PartyLedgerStore {
   /** Patch a draft in place (id immutable); resolves once it is on disk. */
   async updateDraft(id: string, patch: Partial<PartyLedgerRowDraft>): Promise<void> {
     const cols = this.activeCols();
+    const now = Date.now();
     cols.drafts.update((doc) => ({
-      rows: doc.rows.map((row) => (row.id === id ? { ...row, ...patch, id: row.id } : row)),
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, ...patch, id: row.id, updatedAt: now } : row,
+      ),
     }));
     await cols.drafts.flush();
   }
 
-  /** Remove a draft; resolves once the deletion is on disk. */
+  /** Tombstone a draft, for the same reason `deleteRow` does. */
   async deleteDraft(id: string): Promise<void> {
     const cols = this.activeCols();
-    cols.drafts.update((doc) => ({ rows: doc.rows.filter((row) => row.id !== id) }));
+    const now = Date.now();
+    cols.drafts.update((doc) => ({
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, deleted: true, updatedAt: now } : row,
+      ),
+    }));
     await cols.drafts.flush();
+  }
+
+  /** Undo path: put a deleted row back under its ORIGINAL id, idempotently. */
+  async restoreRow(row: PartyLedgerRow): Promise<void> {
+    const cols = this.activeCols();
+    const revived = revive(row, Date.now());
+    cols.rows.update((doc) => ({ rows: mergePartyRows(doc.rows, [revived]).rows }));
+    await cols.rows.flush();
   }
 
   /** Undo path: put a deleted draft back under its ORIGINAL id, idempotently. */
   async restoreDraft(row: PartyLedgerRow): Promise<void> {
     const cols = this.activeCols();
-    cols.drafts.update((doc) => ({ rows: mergePartyRows(doc.rows, [row]).rows }));
+    const revived = revive(row, Date.now());
+    cols.drafts.update((doc) => ({ rows: mergePartyRows(doc.rows, [revived]).rows }));
     await cols.drafts.flush();
   }
 
@@ -332,8 +376,13 @@ export class PartyLedgerStore {
     const held = drafts.length - complete.length;
     if (complete.length === 0) return { synced: 0, held };
 
-    cols.rows.set({ rows: mergePartyRows(this.rows(), complete).rows });
-    cols.drafts.set({ rows: drafts.filter((row) => !isPartyDraftComplete(row)) });
+    // Timestamps copy verbatim too: re-stamping here would let a graduated row
+    // beat a newer edit made to the same id on another device.
+    const graduated = new Set(complete.map((row) => row.id));
+    cols.rows.set({ rows: mergePartyRows(this.rowsWithTombstones(), complete).rows });
+    cols.drafts.set({
+      rows: this.draftsWithTombstones().filter((row) => !graduated.has(row.id)),
+    });
     await Promise.all([cols.rows.flush(), cols.drafts.flush()]);
     return { synced: complete.length, held };
   }
@@ -362,13 +411,13 @@ export class PartyLedgerStore {
   /** Merge an imported snapshot into the active book, deduped by row id. */
   mergeImport(incoming: Partial<PartyLedgerSnapshot>): MergeReport {
     const cols = this.activeCols();
-    const result = mergePartyRows(this.rows(), incoming.rows ?? []);
+    const result = mergePartyRows(this.rowsWithTombstones(), incoming.rows ?? []);
     cols.rows.set({ rows: result.rows });
     if (incoming.drafts?.length) {
       // Staged rows already synced here (same id in the ledger) are not re-staged.
       const syncedIds = new Set(result.rows.map((row) => row.id));
       const unsynced = incoming.drafts.filter((row) => !syncedIds.has(row.id));
-      cols.drafts.set({ rows: mergePartyRows(this.drafts(), unsynced).rows });
+      cols.drafts.set({ rows: mergePartyRows(this.draftsWithTombstones(), unsynced).rows });
     }
     if (incoming.rates?.length) {
       cols.rates.set({ entries: mergePartyRates(this.rates(), incoming.rates) });

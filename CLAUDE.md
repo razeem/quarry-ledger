@@ -186,17 +186,50 @@ statements, reports and goldens until "Save N to ledger" syncs them.
 - A draft only needs `qty > 0`; `isDraftComplete` / `isPartyDraftComplete` decide what
   sync may move across (crusher/party present). Incomplete drafts stay staged, flagged
   on the sheet, and are completed later by editing them in place.
-- **Sync copies values verbatim and keeps each draft's id** — the id is minted at draft
+- **Sync copies values verbatim — id and `updatedAt` included.** The id is minted at draft
   creation and is already the cross-device merge key, so double-syncing (or syncing from
-  two devices) dedupes instead of duplicating. Never recompute rates at sync time.
+  two devices) dedupes instead of duplicating. Never recompute rates at sync time, and
+  never re-stamp: a graduated row must not out-timestamp a newer edit to the same id
+  elsewhere. A draft whose id is already in the ledger is filtered out of `drafts()`
+  rather than stored as gone, which is what makes graduation idempotent across devices.
 - Undo of any delete (row or draft) restores under the ORIGINAL id via
-  `mergeImport`/`restoreDraft` — `deleteRowWithUndo` in `src/app/shared/ledger/` is the
+  `restoreRow`/`restoreDraft` — `deleteRowWithUndo` in `src/app/shared/ledger/` is the
   only delete path the UI uses.
 - Drafts ride every transfer path: registered in both version maps and
   `KNOWN_COLLECTIONS`, included in `snapshot()`/`replaceAll()`/JSON backups. The xlsx
   export stays ledger-only.
 - In e2e, remember: after `saveEntry`/`savePartyEntry` the row is a DRAFT — call
   `syncDrafts`/`syncPartyDrafts` (helpers.ts) before asserting on Ledger/report counts.
+
+## Deletes, timestamps and merge
+
+Every row carries two optional sync fields (`SyncFields` in `src/domain/types.ts`):
+`updatedAt` (device clock at the last edit) and `deleted` (a tombstone). **Both are
+optional forever** — the bundled seed and every export written before sync carry neither
+and must keep parsing byte-identically, so an absent `updatedAt` reads as `0` and an
+absent `deleted` reads as live.
+
+- **Deleting tombstones, it never drops.** Dropping the record makes the delete local-only:
+  any other device still holding the row pushes it straight back on the next merge. This
+  is why `mergeRows` alone was not enough — a stale import used to resurrect deleted rows.
+- **`mergeRows`/`mergePartyRows` resolve collisions by last write wins** (`incomingWins`,
+  shared by both). An older incoming row is counted `stale` and discarded. Equal
+  timestamps that disagree tie-break on a **canonical, key-sorted serialisation** — the
+  point is not which row wins but that both devices pick the *same* one, which is what
+  makes them converge instead of overwriting each other forever.
+- `rowsEqual` compares `deleted` (as a **boolean** — an untouched row omits it, and
+  `undefined === false` is false) but never `updatedAt`, or every pulled row would report
+  as `updated`.
+- **`rows()`/`drafts()` are the live sets; `rowsWithTombstones()`/`draftsWithTombstones()`
+  are the merge, transfer and sync surface.** Anything writing a whole collection back
+  must read the tombstone-bearing signal — merging into the filtered set silently drops
+  the tombstones. `snapshot()` carries them so deletes travel; the xlsx export does not.
+- **Undo must out-timestamp its own tombstone.** `revive(row, at)` clears the flag and
+  re-stamps; restoring the row exactly as captured would carry its pre-delete timestamp,
+  lose to the tombstone, and make Undo silently do nothing. `restoreRow`/`restoreDraft`
+  are the only correct undo paths.
+- Tombstones are not yet garbage-collected. GC needs the push cursor to know a tombstone
+  has been seen by the backend, so it belongs with the sync engine, not before it.
 
 ## Ledger pages, reports and printing
 

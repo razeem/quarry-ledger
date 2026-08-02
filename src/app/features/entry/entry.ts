@@ -595,11 +595,8 @@ export class Entry {
       message: kind === 'draft' ? 'Draft deleted' : 'Row deleted',
       doDelete: () =>
         kind === 'draft' ? this.store.deleteDraft(row.id) : this.store.deleteRow(row.id),
-      restore: () => {
-        if (kind === 'draft') return this.store.restoreDraft(row);
-        this.store.mergeImport({ rows: [row] });
-        return this.store.flush();
-      },
+      restore: () =>
+        kind === 'draft' ? this.store.restoreDraft(row) : this.store.restoreRow(row),
     });
   }
 

@@ -27,6 +27,17 @@ describe('rowsEqual', () => {
     expect(rowsEqual(row('a'), row('a', { passType: 'Pass' }))).toBe(false);
     expect(rowsEqual(row('a'), row('a', { passType: null }))).toBe(false);
   });
+
+  it('counts the tombstone but compares it as a boolean', () => {
+    expect(rowsEqual(row('a'), row('a', { deleted: true }))).toBe(false);
+    // An untouched row omits the field entirely; that must read as live, not as
+    // a difference — `undefined === false` would be false.
+    expect(rowsEqual(row('a'), row('a', { deleted: false }))).toBe(true);
+  });
+
+  it('ignores updatedAt, so a pulled row does not read as changed', () => {
+    expect(rowsEqual(row('a', { updatedAt: 1 }), row('a', { updatedAt: 999 }))).toBe(true);
+  });
 });
 
 describe('mergeRows', () => {
@@ -46,10 +57,13 @@ describe('mergeRows', () => {
   });
 
   it('updates a row in place when its fields changed', () => {
-    const { rows, report } = mergeRows([row('a', { qty: 30 })], [row('a', { qty: 42 })]);
+    const { rows, report } = mergeRows(
+      [row('a', { qty: 30, updatedAt: 100 })],
+      [row('a', { qty: 42, updatedAt: 200 })],
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].qty).toBe(42);
-    expect(report).toMatchObject({ added: 0, updated: 1, unchanged: 0 });
+    expect(report).toMatchObject({ added: 0, updated: 1, unchanged: 0, stale: 0 });
   });
 
   it('never regenerates or reorders existing ids', () => {
@@ -83,25 +97,82 @@ describe('mergeRows', () => {
     expect(mergeRows([row('a')], []).report).toMatchObject({ added: 0, total: 1 });
   });
 
-  it('applies the last of several incoming versions of one id', () => {
-    const { rows, report } = mergeRows([], [row('a', { qty: 1 }), row('a', { qty: 2 })]);
+  it('applies the newest of several incoming versions of one id', () => {
+    const { rows, report } = mergeRows(
+      [],
+      [row('a', { qty: 1, updatedAt: 100 }), row('a', { qty: 2, updatedAt: 200 })],
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].qty).toBe(2);
     expect(report).toMatchObject({ added: 1, updated: 1 });
+  });
+
+  it('keeps the local row when the incoming copy is older', () => {
+    const { rows, report } = mergeRows(
+      [row('a', { qty: 42, updatedAt: 900 })],
+      [row('a', { qty: 30, updatedAt: 100 })],
+    );
+    expect(rows[0].qty).toBe(42);
+    expect(report).toMatchObject({ updated: 0, stale: 1 });
+  });
+
+  it('applies an incoming tombstone over a live local row', () => {
+    const { rows, report } = mergeRows(
+      [row('a', { updatedAt: 100 })],
+      [row('a', { deleted: true, updatedAt: 900 })],
+    );
+    expect(rows[0].deleted).toBe(true);
+    expect(report).toMatchObject({ updated: 1, stale: 0 });
+  });
+
+  it('does not let a stale export resurrect a row deleted on another device', () => {
+    // The bug this whole rule exists to stop: device A deletes a row, then someone
+    // merge-imports a backup taken before the delete.
+    const { rows, report } = mergeRows(
+      [row('a', { deleted: true, updatedAt: 900 })],
+      [row('a', { updatedAt: 100 })],
+    );
+    expect(rows[0].deleted).toBe(true);
+    expect(report.stale).toBe(1);
+  });
+
+  it('treats a row with no updatedAt as older than any stamped row', () => {
+    // The bundled seed and every pre-sync export carry no timestamp, so they must
+    // always lose to a row the user has actually touched — in either direction.
+    const forward = mergeRows([row('a', { qty: 1 })], [row('a', { qty: 2, updatedAt: 1 })]);
+    expect(forward.rows[0].qty).toBe(2);
+
+    const backward = mergeRows([row('a', { qty: 2, updatedAt: 1 })], [row('a', { qty: 1 })]);
+    expect(backward.rows[0].qty).toBe(2);
+    expect(backward.report.stale).toBe(1);
+  });
+
+  it('breaks an equal-timestamp tie identically in both directions', () => {
+    // Convergence: two devices resolving the same conflict must land on the same
+    // row, or they overwrite each other forever.
+    const a = row('x', { qty: 10, updatedAt: 500 });
+    const b = row('x', { qty: 20, updatedAt: 500 });
+    expect(mergeRows([a], [b]).rows[0]).toEqual(mergeRows([b], [a]).rows[0]);
   });
 });
 
 describe('describeMerge', () => {
   it('summarises a merge for the toast', () => {
-    expect(describeMerge({ added: 2, updated: 1, unchanged: 3, skipped: 0, total: 6 })).toBe(
-      '2 added · 1 updated · 3 unchanged — 6 rows total',
-    );
+    expect(
+      describeMerge({ added: 2, updated: 1, unchanged: 3, skipped: 0, stale: 0, total: 6 }),
+    ).toBe('2 added · 1 updated · 3 unchanged — 6 rows total');
   });
 
   it('mentions skipped rows only when there are some', () => {
-    expect(describeMerge({ added: 0, updated: 0, unchanged: 0, skipped: 2, total: 0 })).toContain(
-      '2 skipped',
-    );
+    expect(
+      describeMerge({ added: 0, updated: 0, unchanged: 0, skipped: 2, stale: 0, total: 0 }),
+    ).toContain('2 skipped');
+  });
+
+  it('mentions rows rejected as older only when there are some', () => {
+    expect(
+      describeMerge({ added: 0, updated: 0, unchanged: 0, skipped: 0, stale: 3, total: 5 }),
+    ).toContain('3 older');
   });
 });
 

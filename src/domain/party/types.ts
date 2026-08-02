@@ -9,6 +9,8 @@
  * This layer is pure: no framework, no I/O (same rules as `src/domain`).
  */
 
+import type { SyncFields } from '../types';
+
 /** One named per-ton profit share, e.g. `{ name: 'Owner', perTon: 40 }`. */
 export interface PartyProfitShare {
   name: string;
@@ -23,7 +25,7 @@ export interface PartyProfitShare {
  * resolved from the party's rate config at entry time. Editing the config must
  * never mutate an existing row (same non-negotiable as the daily ledger).
  */
-export interface PartyLedgerRow {
+export interface PartyLedgerRow extends SyncFields {
   /** Unique and immutable — the merge key for cross-device import. Never regenerate. */
   id: string;
   /** ISO calendar date, 'YYYY-MM-DD'. */

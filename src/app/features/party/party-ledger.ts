@@ -179,10 +179,7 @@ export class PartyLedger {
     await deleteRowWithUndo(this.snackBar, {
       message: 'Row deleted',
       doDelete: () => this.store.deleteRow(row.id),
-      restore: () => {
-        this.store.mergeImport({ rows: [row] });
-        return this.store.flush();
-      },
+      restore: () => this.store.restoreRow(row),
     });
   }
 

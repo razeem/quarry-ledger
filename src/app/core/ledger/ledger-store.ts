@@ -9,7 +9,13 @@ import {
 } from '../../../domain/types';
 import { activeDates, summarize } from '../../../domain/summaries';
 import { knownCrushers, knownVehicles } from '../../../domain/rates';
-import { mergeRateChart, mergeRows, mergeVehicles, type MergeReport } from '../../../domain/merge';
+import {
+  mergeRateChart,
+  mergeRows,
+  mergeVehicles,
+  revive,
+  type MergeReport,
+} from '../../../domain/merge';
 
 /**
  * The app's persistence facade.
@@ -40,12 +46,13 @@ interface SeedDoc {
 }
 
 export const COLLECTION_VERSIONS = {
-  'ledger-rows': 1,
+  // v1 -> v2 added the optional `updatedAt` / `deleted` sync fields to each row.
+  'ledger-rows': 2,
   'rate-chart': 2,
   vehicles: 1,
   'ledger-settings': 1,
   'ledger-seed': 1,
-  'entry-drafts': 1,
+  'entry-drafts': 2,
 } as const;
 
 /** A new row minus its id — the store assigns the id and never changes it after. */
@@ -91,6 +98,9 @@ export class LedgerStore {
     key: 'ledger-rows',
     version: COLLECTION_VERSIONS['ledger-rows'],
     defaults: { rows: [] },
+    // v1 -> v2 added the optional sync fields. Nothing is backfilled: an absent
+    // `updatedAt` reads as 0 and an absent `deleted` reads as live, which is
+    // exactly right for rows written before sync existed.
     migrate: (data) => ({ rows: (data as Partial<RowsDoc>)?.rows ?? [] }),
   });
 
@@ -170,9 +180,30 @@ export class LedgerStore {
     () => this.ready() && (this.seedStore.value().seeded || this.seedSettled()),
   );
 
-  readonly rows = computed(() => this.rowsStore.value().rows);
-  /** Staged entry-sheet rows awaiting `syncDrafts()`. */
-  readonly drafts = computed(() => this.draftsStore.value().rows);
+  /**
+   * Every stored row, tombstones included — the merge, transfer and sync surface.
+   *
+   * Anything that writes the whole collection back must read THIS, never `rows()`:
+   * merging into the filtered set drops the tombstones, and a dropped tombstone is
+   * a delete that stops propagating and gets resurrected by the next stale import.
+   */
+  readonly rowsWithTombstones = computed(() => this.rowsStore.value().rows);
+  /** The live rows. Tombstones are invisible above the store, by design. */
+  readonly rows = computed(() => this.rowsWithTombstones().filter((row) => !row.deleted));
+
+  /** Staged rows, tombstones included — the transfer and sync surface. */
+  readonly draftsWithTombstones = computed(() => this.draftsStore.value().rows);
+  /**
+   * Staged entry-sheet rows awaiting `syncDrafts()`.
+   *
+   * A draft whose id already exists in the ledger is filtered out rather than
+   * stored as gone: that is what makes graduation idempotent when the sync
+   * happened on another device, where this device's copy is still staged.
+   */
+  readonly drafts = computed(() => {
+    const synced = new Set(this.rowsWithTombstones().map((row) => row.id));
+    return this.draftsWithTombstones().filter((row) => !row.deleted && !synced.has(row.id));
+  });
   readonly rateChart = computed(() => this.rateChartStore.value().entries);
   readonly vehicles = computed(() => this.vehiclesStore.value().list);
   readonly settings = this.settingsStore.value;
@@ -195,13 +226,17 @@ export class LedgerStore {
     return this.drafts().find((row) => row.id === id);
   }
 
+  /**
+   * The whole book for backup / transfer — tombstones included, so a delete made
+   * here travels to the other device instead of being undone by it.
+   */
   snapshot(): LedgerSnapshot {
     return {
-      rows: this.rows(),
+      rows: this.rowsWithTombstones(),
       rateChart: this.rateChart(),
       vehicles: this.vehicles(),
       settings: this.settings(),
-      drafts: this.drafts(),
+      drafts: this.draftsWithTombstones(),
     };
   }
 
@@ -237,7 +272,7 @@ export class LedgerStore {
 
       // Merge rather than replace: if a restore landed before the seed effect ran,
       // the user's own data must win and ids must not duplicate.
-      this.rowsStore.set({ rows: mergeRows(this.rows(), rows).rows });
+      this.rowsStore.set({ rows: mergeRows(this.rowsWithTombstones(), rows).rows });
       this.rateChartStore.set({ entries: mergeRateChart(this.rateChart(), chart) });
       this.vehiclesStore.set({ list: mergeVehicles(this.vehicles(), vehicles) });
       this.seedStore.set({ seeded: true });
@@ -266,7 +301,7 @@ export class LedgerStore {
    * see `persistNow`.
    */
   async addRow(draft: LedgerRowDraft): Promise<LedgerRow> {
-    const row: LedgerRow = { ...draft, id: newRowId() };
+    const row: LedgerRow = { ...draft, id: newRowId(), updatedAt: Date.now() };
     this.rowsStore.update((doc) => ({ rows: [...doc.rows, row] }));
     await this.persistNow();
     return row;
@@ -278,15 +313,28 @@ export class LedgerStore {
    */
   /** Patch a row in place; resolves once the change is on disk. */
   async updateRow(id: string, patch: Partial<LedgerRowDraft>): Promise<void> {
+    const now = Date.now();
     this.rowsStore.update((doc) => ({
-      rows: doc.rows.map((row) => (row.id === id ? { ...row, ...patch, id: row.id } : row)),
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, ...patch, id: row.id, updatedAt: now } : row,
+      ),
     }));
     await this.persistNow();
   }
 
-  /** Remove a row; resolves once the deletion is on disk. */
+  /**
+   * Delete a row by tombstoning it — the record stays, flagged and re-stamped.
+   *
+   * Dropping it outright would make the delete local-only: any other device still
+   * holding the row would push it straight back on the next merge or sync.
+   */
   async deleteRow(id: string): Promise<void> {
-    this.rowsStore.update((doc) => ({ rows: doc.rows.filter((row) => row.id !== id) }));
+    const now = Date.now();
+    this.rowsStore.update((doc) => ({
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, deleted: true, updatedAt: now } : row,
+      ),
+    }));
     await this.persistNow();
   }
 
@@ -299,7 +347,7 @@ export class LedgerStore {
 
   /** Stage a row with a fresh immutable id; resolves once it is on disk. */
   async addDraft(draft: LedgerRowDraft): Promise<LedgerRow> {
-    const row: LedgerRow = { ...draft, id: newRowId() };
+    const row: LedgerRow = { ...draft, id: newRowId(), updatedAt: Date.now() };
     this.draftsStore.update((doc) => ({ rows: [...doc.rows, row] }));
     await this.draftsStore.flush();
     return row;
@@ -307,21 +355,37 @@ export class LedgerStore {
 
   /** Patch a draft in place (id immutable); resolves once it is on disk. */
   async updateDraft(id: string, patch: Partial<LedgerRowDraft>): Promise<void> {
+    const now = Date.now();
     this.draftsStore.update((doc) => ({
-      rows: doc.rows.map((row) => (row.id === id ? { ...row, ...patch, id: row.id } : row)),
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, ...patch, id: row.id, updatedAt: now } : row,
+      ),
     }));
     await this.draftsStore.flush();
   }
 
-  /** Remove a draft; resolves once the deletion is on disk. */
+  /** Tombstone a draft, for the same reason `deleteRow` does. */
   async deleteDraft(id: string): Promise<void> {
-    this.draftsStore.update((doc) => ({ rows: doc.rows.filter((row) => row.id !== id) }));
+    const now = Date.now();
+    this.draftsStore.update((doc) => ({
+      rows: doc.rows.map((row) =>
+        row.id === id ? { ...row, deleted: true, updatedAt: now } : row,
+      ),
+    }));
     await this.draftsStore.flush();
+  }
+
+  /** Undo path: put a deleted row back under its ORIGINAL id, idempotently. */
+  async restoreRow(row: LedgerRow): Promise<void> {
+    const revived = revive(row, Date.now());
+    this.rowsStore.update((doc) => ({ rows: mergeRows(doc.rows, [revived]).rows }));
+    await this.persistNow();
   }
 
   /** Undo path: put a deleted draft back under its ORIGINAL id, idempotently. */
   async restoreDraft(row: LedgerRow): Promise<void> {
-    this.draftsStore.update((doc) => ({ rows: mergeRows(doc.rows, [row]).rows }));
+    const revived = revive(row, Date.now());
+    this.draftsStore.update((doc) => ({ rows: mergeRows(doc.rows, [revived]).rows }));
     await this.draftsStore.flush();
   }
 
@@ -338,8 +402,14 @@ export class LedgerStore {
     const held = drafts.length - complete.length;
     if (complete.length === 0) return { synced: 0, held };
 
-    this.rowsStore.set({ rows: mergeRows(this.rows(), complete).rows });
-    this.draftsStore.set({ rows: drafts.filter((row) => !isDraftComplete(row)) });
+    // Values copy verbatim, timestamps included: the rates were snapshotted when
+    // the draft was entered, and re-stamping here would let a graduated row beat
+    // a newer edit made to the same id on another device.
+    const graduated = new Set(complete.map((row) => row.id));
+    this.rowsStore.set({ rows: mergeRows(this.rowsWithTombstones(), complete).rows });
+    this.draftsStore.set({
+      rows: this.draftsWithTombstones().filter((row) => !graduated.has(row.id)),
+    });
     await Promise.all([this.rowsStore.flush(), this.draftsStore.flush()]);
     return { synced: complete.length, held };
   }
@@ -395,14 +465,14 @@ export class LedgerStore {
    * same file twice therefore adds nothing.
    */
   mergeImport(incoming: Partial<LedgerSnapshot>): MergeReport {
-    const result = mergeRows(this.rows(), incoming.rows ?? []);
+    const result = mergeRows(this.rowsWithTombstones(), incoming.rows ?? []);
     this.rowsStore.set({ rows: result.rows });
 
     if (incoming.drafts?.length) {
       // Staged rows already synced here (same id in the ledger) are not re-staged.
       const syncedIds = new Set(result.rows.map((row) => row.id));
       const unsynced = incoming.drafts.filter((row) => !syncedIds.has(row.id));
-      this.draftsStore.set({ rows: mergeRows(this.drafts(), unsynced).rows });
+      this.draftsStore.set({ rows: mergeRows(this.draftsWithTombstones(), unsynced).rows });
     }
     if (incoming.rateChart?.length) {
       this.rateChartStore.set({ entries: mergeRateChart(this.rateChart(), incoming.rateChart) });

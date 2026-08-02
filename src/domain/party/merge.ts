@@ -4,7 +4,7 @@
  * duplicates, and a changed row updates in place rather than forking.
  */
 
-import type { MergeReport } from '../merge';
+import { incomingWins, type MergeReport } from '../merge';
 import type { PartyLedgerRow, PartyProfitShare, PartyRateConfig } from './types';
 
 export interface PartyMergeResult {
@@ -31,17 +31,25 @@ function sharesEqual(a: readonly PartyProfitShare[], b: readonly PartyProfitShar
   return a.every((share, i) => share.name === b[i].name && share.perTon === b[i].perTon);
 }
 
-/** True when two rows carry the same values in every field except `id`. */
+/**
+ * True when two rows carry the same values in every field except `id`.
+ *
+ * As in the daily ledger: `deleted` counts (compared as a boolean, since an
+ * untouched row omits it), `updatedAt` does not.
+ */
 export function partyRowsEqual(a: PartyLedgerRow, b: PartyLedgerRow): boolean {
   return (
     ROW_FIELDS.every((field) => a[field] === b[field]) &&
+    !!a.deleted === !!b.deleted &&
     sharesEqual(a.profitShares ?? [], b.profitShares ?? [])
   );
 }
 
 /**
  * Merge `incoming` party rows into `existing`, deduped by `id`. Existing rows
- * keep their position; new rows append in arrival order; last write wins.
+ * keep their position; new rows append in arrival order; collisions resolve by
+ * last write wins via the shared `incomingWins` rule, so an older incoming row
+ * is counted `stale` and discarded rather than overwriting a newer local one.
  */
 export function mergePartyRows(
   existing: readonly PartyLedgerRow[],
@@ -49,7 +57,14 @@ export function mergePartyRows(
 ): PartyMergeResult {
   const rows = [...existing];
   const indexById = new Map(rows.map((row, index) => [row.id, index]));
-  const report: MergeReport = { added: 0, updated: 0, unchanged: 0, skipped: 0, total: 0 };
+  const report: MergeReport = {
+    added: 0,
+    updated: 0,
+    unchanged: 0,
+    skipped: 0,
+    stale: 0,
+    total: 0,
+  };
 
   for (const row of incoming) {
     if (!row?.id) {
@@ -64,9 +79,11 @@ export function mergePartyRows(
       report.added += 1;
     } else if (partyRowsEqual(rows[at], row)) {
       report.unchanged += 1;
-    } else {
+    } else if (incomingWins(rows[at], row)) {
       rows[at] = row;
       report.updated += 1;
+    } else {
+      report.stale += 1;
     }
   }
 

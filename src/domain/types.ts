@@ -10,13 +10,37 @@
 export type PassType = 'Pass' | 'WO Pass';
 
 /**
+ * What every syncable record carries so edits and deletes can travel between
+ * devices. Shared by `LedgerRow` and `PartyLedgerRow`.
+ *
+ * **Both are optional on purpose.** The bundled seed and every export written
+ * before sync existed carry neither, and must keep parsing byte-identically —
+ * so a missing `updatedAt` reads as `0` (older than anything a user has
+ * touched) and a missing `deleted` reads as live.
+ */
+export interface SyncFields {
+  /**
+   * Device clock in ms at the last edit — the last-write-wins comparison key.
+   * Device clocks can disagree; the sync cursor uses server time instead, so
+   * skew can pick an unexpected winner but can never lose a record.
+   */
+  updatedAt?: number;
+  /**
+   * Tombstone. A deleted record is kept, flagged, so the delete propagates
+   * instead of the row being resurrected by an older copy from another device.
+   * Tombstones are invisible above the store: `rows()` filters them out.
+   */
+  deleted?: boolean;
+}
+
+/**
  * A single rock load — the only stored record and the single source of truth.
  *
  * `quaryRate` / `crusherRate` / `rentRate` / `commRate` are **snapshots** taken
  * at entry time. The rate chart only pre-fills the entry form; editing it must
  * never mutate an existing row.
  */
-export interface LedgerRow {
+export interface LedgerRow extends SyncFields {
   /** Unique and immutable — the merge key for cross-device import. Never regenerate. */
   id: string;
   /** ISO calendar date, 'YYYY-MM-DD'. */
