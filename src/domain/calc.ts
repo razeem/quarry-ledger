@@ -57,6 +57,28 @@ function num(value: number | null | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * A typed-over amount, or the computed one when there is none.
+ *
+ * `0` is a real override and must win — hence an explicit null check rather
+ * than `||`. A non-finite value falls back rather than poisoning every total
+ * downstream with NaN.
+ */
+function overridden(value: number | null | undefined, computed: number): number {
+  if (value === null || value === undefined) return computed;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : computed;
+}
+
+/** True when this row carries a user-typed amount for `field`. */
+export function hasOverride(
+  row: LedgerRow,
+  field: 'quaryAmountOverride' | 'vehicleRentOverride',
+): boolean {
+  const value = row[field];
+  return value !== null && value !== undefined && Number.isFinite(Number(value));
+}
+
 /** Compute every derived value for a single row. Pure. */
 export function computeRow(row: LedgerRow): ComputedRow {
   const qty = num(row.qty);
@@ -66,9 +88,11 @@ export function computeRow(row: LedgerRow): ComputedRow {
   const commRate = num(row.commRate);
 
   const crusherAmount = qty * crusherRate;
-  const quaryAmount = round10(qty * quaryRate);
+  const quaryAmount = overridden(row.quaryAmountOverride, round10(qty * quaryRate));
+  // Ton stays computed even when the rent is overridden: it is a display column
+  // that feeds no money figure once `vehicleRent` is settled directly.
   const vehicleTon = rentRate > 0 ? qty : 0;
-  const vehicleRent = vehicleTon * rentRate;
+  const vehicleRent = overridden(row.vehicleRentOverride, vehicleTon * rentRate);
 
   return {
     crusherAmount,

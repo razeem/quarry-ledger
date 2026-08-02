@@ -373,6 +373,64 @@ test.describe('drafts, inline actions and sync', () => {
     await expect(page.locator('[data-testid^="row-rentRate-"]').first()).toHaveValue('0');
   });
 
+  test('a settled amount can be typed over, and cleared back to the formula', async ({
+    page,
+  }) => {
+    // The business adjusts what it actually settles with the quarry. That
+    // figure is the real one, and it is routinely not a multiple of 10 — which
+    // ROUND(qty x rate, -1) can never produce from any rate at all.
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await setCrusher(page, 'Riverside Crusher');
+    await page.getByTestId('entry-qty').fill('10');
+    await saveEntry(page);
+    await syncDrafts(page);
+
+    const amount = page.locator('[data-testid^="row-quaryAmount-"]').first();
+    await expect(amount).toHaveValue('6100'); // round10(10 x 610)
+
+    await amount.fill('6237');
+    // Profit is 10 x 900 - 6237 - 10 x 250 = 263, so the override reached the
+    // totals rather than just the cell.
+    await expect(page.locator('.sheet__saved').first()).toContainText('263');
+
+    await page.reload();
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await expect(page.locator('[data-testid^="row-quaryAmount-"]').first()).toHaveValue('6237');
+
+    // Clearing hands the row back to the formula.
+    await page.locator('[data-testid^="row-quaryAmount-"]').first().fill('');
+    await expect(page.locator('.sheet__saved').first()).toContainText('400'); // 9000-6100-2500
+    await page.reload();
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await expect(page.locator('[data-testid^="row-quaryAmount-"]').first()).toHaveValue('6100');
+  });
+
+  test('a settled amount can be overridden on the entry row and is snapshotted', async ({
+    page,
+  }) => {
+    // The override has to be enterable WITH the load, not only after saving it.
+    await page.goto('/entry');
+    await page.getByTestId('entry-date').fill('2026-07-30');
+    await setCrusher(page, 'Riverside Crusher');
+    await page.getByTestId('entry-qty').fill('10');
+
+    const amount = page.getByTestId('entry-quary-amount');
+    await expect(amount).toHaveValue('6100'); // round10(10 x 610), badged auto
+    await amount.fill('6237');
+    await expect(page.getByTestId('sheet-profit')).toContainText('263');
+
+    await saveEntry(page);
+    await syncDrafts(page);
+
+    // Snapshotted onto the row, and the saved cell says it was typed over.
+    await expect(page.locator('[data-testid^="row-quaryAmount-"]').first()).toHaveValue('6237');
+    await expect(page.locator('.sheet__saved').first()).toContainText('edited');
+
+    // The next load starts clean — an override belongs to one load.
+    await expect(page.getByTestId('entry-quary-amount')).not.toHaveValue('6237');
+  });
+
   test('deleting a row from the sheet can be undone with the same id', async ({ page }) => {
     await page.goto('/entry');
     await page.getByTestId('entry-date').fill('2026-07-30');

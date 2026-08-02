@@ -27,7 +27,10 @@ workspace.
 ## Non-negotiables
 
 - **The Daily Ledger row is the single source of truth.** Reports are pure functions
-  over rows — never store derived values.
+  over rows — never store derived values. The one exception proves the rule:
+  `quaryAmountOverride` / `vehicleRentOverride` are amounts the user **deliberately
+  typed**, which makes them inputs, not derived values. Absent means "compute it".
+  See "Settled amounts" below before adding any other stored figure.
 - **Rates are snapshots.** Editing the rate chart must never mutate existing rows.
 - **Calculation engine is contract-bound.** `data/golden-totals.json` values were
   verified against the original Excel workbook; the test suite must always reproduce
@@ -314,6 +317,35 @@ membership, keys). What matters in the code:
 - Locally the values live in a gitignored `.env`. **`playwright.config.ts` forces
   `SYNC_OFF=1`**, so the e2e suite always builds with no backend and can never reach the
   real project whatever a developer has configured.
+
+## Settled amounts (the override columns)
+
+The business adjusts what it actually settles with the quarry — a negotiated figure, a
+slip-weight difference, a rounding at the quarry's end — and **that adjusted amount is the
+real one**. In the client's own workbook this happens on 811 of 1803 loads, averaging a
+couple of hundred rupees away from the formula. It is not drift and not a typo; it is how
+they work, and it was the reason the reconciliation showed their profit ~₹2 lakh below what
+their entered quantities and rates implied.
+
+- `quaryAmountOverride` and `vehicleRentOverride` on `LedgerRow` are optional. Present
+  wins; absent means compute. **`0` is a real override** (a trip where no rent was paid
+  despite a rate on file), so every check is `== null`, never falsy.
+- **A rate override cannot substitute for this.** `round10` always yields a multiple of
+  10, and real settlements often are not — 52 rows in the client's data are unreachable
+  from *any* rate. That is why the column exists rather than back-solving the rate, which
+  would also smear the adjustment into a number that means something else (the agreed
+  ₹/ton) and make the rate-chart highlight meaningless.
+- Typing in the figure the formula already produces stores **nothing** — that is
+  agreement, not an override, and pinning it would freeze the row against a later rate
+  correction.
+- Crusher amount has no override: it reconciled to the rupee across all 1803 loads, so
+  none is needed. Add one only if that changes.
+- `vehicleTon` stays computed even when the rent is overridden — it feeds no money figure
+  once the rent is settled directly, so it is display-only.
+- The overrides ride every path: `ROW_FIELDS` in `merge.ts` (so clearing one registers as
+  a change), the xlsx columns, and `0002_amount_overrides.sql`. In the workbook the
+  derived cell becomes `IF(override="", <formula>, override)`, so editing the override in
+  Excel recalculates exactly as it does in the app.
 
 ## Rates and the chart
 

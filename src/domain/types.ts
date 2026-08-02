@@ -68,6 +68,32 @@ export interface LedgerRow extends SyncFields {
   commRate: number;
   /** Registration, e.g. 'KL 00 V 1087'. Messy free text; may be ''. Never normalised. */
   vehicle: string;
+
+  /**
+   * A quarry amount the user typed over the computed one.
+   *
+   * The business adjusts what it actually settles with the quarry — a
+   * negotiated figure, a slip-weight difference, a rounding at the quarry's
+   * end — and that adjusted amount is the real one. It averages a couple of
+   * hundred rupees away from `ROUND(qty × quaryRate, -1)`, so it is nothing
+   * like a rounding artefact.
+   *
+   * **This does not break "never store derived values".** That rule exists so
+   * totals cannot drift away from their inputs. A figure the user deliberately
+   * typed *is* an input — the same standing a snapshotted rate already has —
+   * and it is the only way to record an amount the formula cannot reach:
+   * `round10` always yields a multiple of 10, while real settlements are not.
+   *
+   * Absent means "compute it", which is why it is optional and why the bundled
+   * seed and every earlier export still reproduce the golden totals exactly.
+   */
+  quaryAmountOverride?: number;
+  /**
+   * A vehicle rent the user typed over `vehicleTon × rentRate`, for the same
+   * reason. `0` is a meaningful override — a trip where no rent was actually
+   * paid despite a rate being on file.
+   */
+  vehicleRentOverride?: number;
 }
 
 /** One rate-chart entry: the pre-fill source for a crusher + pass type. */

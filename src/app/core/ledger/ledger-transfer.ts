@@ -50,6 +50,9 @@ const LEDGER_COLUMNS = [
   { header: 'Rent Rate', key: 'rentRate', width: 11 },
   { header: 'Comm Rate', key: 'commRate', width: 11 },
   { header: 'Vehicle', key: 'vehicle', width: 18 },
+  // Typed-over amounts. STORED, not derived: blank means "use the formula".
+  { header: 'Quary Amount Override', key: 'quaryAmountOverride', width: 20 },
+  { header: 'Vehicle Rent Override', key: 'vehicleRentOverride', width: 20 },
   // --- derived, written as formulas over the columns above -------------------
   { header: 'Crusher Amount', key: 'crusherAmount', width: 15 },
   { header: 'Quary Amount', key: 'quaryAmount', width: 14 },
@@ -71,13 +74,16 @@ const L = {
   crusherRate: 'H',
   rentRate: 'I',
   commRate: 'J',
-  crusherAmount: 'L',
-  quaryAmount: 'M',
-  vehicleTon: 'N',
-  vehicleRent: 'O',
-  profit: 'P',
-  discountQty: 'Q',
-  discount: 'R',
+  vehicle: 'K',
+  quaryOverride: 'L',
+  rentOverride: 'M',
+  crusherAmount: 'N',
+  quaryAmount: 'O',
+  vehicleTon: 'P',
+  vehicleRent: 'Q',
+  profit: 'R',
+  discountQty: 'S',
+  discount: 'T',
 } as const;
 
 interface ExcelJsModule {
@@ -177,16 +183,26 @@ export class LedgerTransfer {
         // A null passType must round-trip as an empty cell, not the text 'null'.
         passType: row.passType ?? '',
         // Mirrors `computeRow` cell for cell — see src/domain/calc.ts.
+        // Blank override cell => the formula applies; type a number in and it
+        // wins. Editing the override in Excel recalculates the row, exactly as
+        // it does in the app.
+        quaryAmountOverride: row.quaryAmountOverride ?? null,
+        vehicleRentOverride: row.vehicleRentOverride ?? null,
         crusherAmount: formulaCell(`${L.qty}${r}*${L.crusherRate}${r}`, c.crusherAmount),
         quaryAmount: formulaCell(
-          `ROUND(${L.qty}${r}*${L.quaryRate}${r},-1)`,
+          `IF(${L.quaryOverride}${r}="",ROUND(${L.qty}${r}*${L.quaryRate}${r},-1),` +
+            `${L.quaryOverride}${r})`,
           c.quaryAmount,
         ),
         vehicleTon: formulaCell(
           `IF(${L.rentRate}${r}>0,${L.qty}${r},0)`,
           c.vehicleTon,
         ),
-        vehicleRent: formulaCell(`${L.vehicleTon}${r}*${L.rentRate}${r}`, c.vehicleRent),
+        vehicleRent: formulaCell(
+          `IF(${L.rentOverride}${r}="",${L.vehicleTon}${r}*${L.rentRate}${r},` +
+            `${L.rentOverride}${r})`,
+          c.vehicleRent,
+        ),
         profit: formulaCell(
           `${L.crusherAmount}${r}-${L.quaryAmount}${r}-${L.vehicleRent}${r}`,
           c.profit,
@@ -439,6 +455,10 @@ export class LedgerTransfer {
           rentRate: num(cell('rent rate')),
           commRate: num(cell('comm rate')),
           vehicle: str(cell('vehicle')),
+          // Blank means "no override" and must stay absent, not become 0 —
+          // a 0 override is a real instruction to settle at nothing.
+          ...optionalNum('quaryAmountOverride', cell('quary amount override')),
+          ...optionalNum('vehicleRentOverride', cell('vehicle rent override')),
         });
       });
     }
@@ -521,7 +541,24 @@ function normaliseRow(raw: Record<string, unknown>): LedgerRow {
     rentRate: num(raw['rentRate']),
     commRate: num(raw['commRate']),
     vehicle: str(raw['vehicle']),
+    ...optionalNum('quaryAmountOverride', raw['quaryAmountOverride']),
+    ...optionalNum('vehicleRentOverride', raw['vehicleRentOverride']),
   };
+}
+
+/**
+ * An optional numeric field, as a spreadable fragment.
+ *
+ * Absent and 0 mean different things for an override, so a blank cell must
+ * leave the key OFF the row rather than setting it to 0.
+ */
+function optionalNum(
+  key: 'quaryAmountOverride' | 'vehicleRentOverride',
+  value: unknown,
+): Partial<LedgerRow> {
+  if (value === null || value === undefined || str(value) === '') return {};
+  const parsed = Number(str(value));
+  return Number.isFinite(parsed) ? { [key]: parsed } : {};
 }
 
 function normaliseRate(raw: Record<string, unknown>): RateChartEntry {

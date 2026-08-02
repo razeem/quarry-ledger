@@ -177,9 +177,52 @@
                   </mat-autocomplete>
                 </td>
                 <td class="app-num text-right">{{ inr(view.calc.crusherAmount) }}</td>
-                <td class="app-num text-right">{{ inr(view.calc.quaryAmount) }}</td>
+                <!--
+                  Settled amounts, not merely computed ones. The formula fills
+                  them in, but what the business actually settles with the
+                  quarry is sometimes different, and that figure is the real
+                  one. Typing here stores an override; clearing the cell hands
+                  the row back to the formula.
+                -->
+                <td class="sheet__editcell" [class.sheet__cell--edited]="view.overridden.quary">
+                  <input
+                    class="sheet__cell sheet__cell--num"
+                    type="number"
+                    inputmode="decimal"
+                    step="1"
+                    [ngModel]="view.row.quaryAmountOverride ?? view.calc.quaryAmount"
+                    (ngModelChange)="patchAmountOverride(view, 'quaryAmountOverride', $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    [attr.title]="view.overridden.quary ? OVERRIDE_HINT : null"
+                    aria-label="Quary amount"
+                    [attr.data-testid]="view.prefix + 'quaryAmount-' + view.row.id"
+                  />
+                  @if (view.overridden.quary) {
+                    <span class="sheet__badge" aria-hidden="true">edited</span>
+                  }
+                </td>
                 <td class="app-num text-right">{{ view.calc.vehicleTon.toFixed(2) }}</td>
-                <td class="app-num text-right">{{ inr(view.calc.vehicleRent) }}</td>
+                <td class="sheet__editcell" [class.sheet__cell--edited]="view.overridden.rent">
+                  <input
+                    class="sheet__cell sheet__cell--num"
+                    type="number"
+                    inputmode="decimal"
+                    step="1"
+                    [ngModel]="view.row.vehicleRentOverride ?? view.calc.vehicleRent"
+                    (ngModelChange)="patchAmountOverride(view, 'vehicleRentOverride', $event)"
+                    [ngModelOptions]="{ standalone: true }"
+                    (keydown.enter)="$event.preventDefault()"
+                    (focus)="revealCell($event)"
+                    [attr.title]="view.overridden.rent ? OVERRIDE_HINT : null"
+                    aria-label="Vehicle rent"
+                    [attr.data-testid]="view.prefix + 'vehicleRent-' + view.row.id"
+                  />
+                  @if (view.overridden.rent) {
+                    <span class="sheet__badge" aria-hidden="true">edited</span>
+                  }
+                </td>
                 <td class="app-num text-right" [class.sheet__calc--loss]="view.calc.profit < 0">
                   {{ inr(view.calc.profit) }}
                 </td>
@@ -344,9 +387,51 @@
               <td class="sheet__calc app-num" data-testid="sheet-crusher-amount">
                 {{ inr(preview().crusherAmount) }}
               </td>
-              <td class="sheet__calc app-num">{{ inr(preview().quaryAmount) }}</td>
+              <!--
+                Settled amounts: autofilled by the formula, badged 'auto', and
+                editable right here. What the business actually settles with the
+                quarry is sometimes a different figure, and it needs to be
+                enterable with the load rather than only after saving it.
+              -->
+              <td class="sheet__autocell">
+                <input
+                  class="sheet__cell sheet__cell--num"
+                  [class.sheet__cell--auto]="amountOrigin('quaryAmountOverride') === 'auto'"
+                  [class.sheet__cell--edited]="amountOrigin('quaryAmountOverride') === 'edited'"
+                  type="number"
+                  inputmode="decimal"
+                  step="1"
+                  aria-label="Quary amount"
+                  [ngModel]="amountValue('quaryAmountOverride')"
+                  (ngModelChange)="onAmountEdit('quaryAmountOverride', $event)"
+                  (focus)="revealCell($event)"
+                  name="quaryAmountOverride"
+                  data-testid="entry-quary-amount"
+                />
+                <span class="sheet__badge" aria-hidden="true">{{
+                  amountOrigin('quaryAmountOverride')
+                }}</span>
+              </td>
               <td class="sheet__calc app-num">{{ preview().vehicleTon.toFixed(2) }}</td>
-              <td class="sheet__calc app-num">{{ inr(preview().vehicleRent) }}</td>
+              <td class="sheet__autocell">
+                <input
+                  class="sheet__cell sheet__cell--num"
+                  [class.sheet__cell--auto]="amountOrigin('vehicleRentOverride') === 'auto'"
+                  [class.sheet__cell--edited]="amountOrigin('vehicleRentOverride') === 'edited'"
+                  type="number"
+                  inputmode="decimal"
+                  step="1"
+                  aria-label="Vehicle rent"
+                  [ngModel]="amountValue('vehicleRentOverride')"
+                  (ngModelChange)="onAmountEdit('vehicleRentOverride', $event)"
+                  (focus)="revealCell($event)"
+                  name="vehicleRentOverride"
+                  data-testid="entry-vehicle-rent"
+                />
+                <span class="sheet__badge" aria-hidden="true">{{
+                  amountOrigin('vehicleRentOverride')
+                }}</span>
+              </td>
               <td
                 class="sheet__calc app-num"
                 [class.sheet__calc--loss]="preview().profit < 0"

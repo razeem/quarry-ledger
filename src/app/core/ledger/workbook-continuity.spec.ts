@@ -160,6 +160,25 @@ describe('daily continuity workbook', () => {
     const parsed = await transfer.parseXlsx(await blob.arrayBuffer());
     expect(parsed.rows).toEqual(SNAPSHOT.rows);
   }, 60_000);
+
+  it('round-trips typed-over amounts, keeping absent distinct from zero', async () => {
+    const transfer = new LedgerTransfer();
+    const rows: LedgerRow[] = [
+      // Settled to the rupee — unreachable from any rate, since round10 only
+      // ever yields multiples of 10.
+      { ...SNAPSHOT.rows[0], id: 'ov1', qty: 29.02, quaryRate: 610, quaryAmountOverride: 17702 },
+      // A trip where no rent was paid despite a rate being on file.
+      { ...SNAPSHOT.rows[1], id: 'ov2', rentRate: 220, vehicleRentOverride: 0 },
+      // No overrides at all: the keys must come back ABSENT, not as 0.
+      { ...SNAPSHOT.rows[2], id: 'ov3' },
+    ];
+    const blob = await transfer.exportXlsx({ ...SNAPSHOT, rows }, 'continuity-override.xlsx');
+    const parsed = await transfer.parseXlsx(await blob.arrayBuffer());
+
+    expect(parsed.rows).toEqual(rows);
+    expect(parsed.rows?.[1].vehicleRentOverride).toBe(0);
+    expect('quaryAmountOverride' in (parsed.rows?.[2] ?? {})).toBe(false);
+  }, 60_000);
 });
 
 describe('party continuity workbook', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeRow, round10 } from './calc';
+import { computeRow, hasOverride, round10 } from './calc';
 import type { LedgerRow } from './types';
 
 function row(overrides: Partial<LedgerRow> = {}): LedgerRow {
@@ -84,6 +84,53 @@ describe('computeRow', () => {
     expect(c.vehicleRent).toBe(0);
     // Profit is then just crusherAmount − quaryAmount.
     expect(c.profit).toBeCloseTo(c.crusherAmount - c.quaryAmount, 2);
+  });
+
+  it('uses a typed-over quarry amount instead of the formula', () => {
+    // What the business actually settles with the quarry, which is routinely a
+    // couple of hundred rupees from qty x rate and is the figure that counts.
+    const c = computeRow(row({ qty: 29.02, quaryRate: 610, quaryAmountOverride: 17910 }));
+    expect(c.quaryAmount).toBe(17910);
+    // The override must flow into profit, or the books disagree with the sheet.
+    expect(c.profit).toBeCloseTo(c.crusherAmount - 17910 - c.vehicleRent, 2);
+  });
+
+  it('reaches amounts the formula cannot produce at all', () => {
+    // round10 always yields a multiple of 10, so a settlement to the rupee is
+    // unreachable from ANY rate. This is why an override exists rather than
+    // back-solving the rate.
+    const c = computeRow(row({ qty: 29.02, quaryRate: 610, quaryAmountOverride: 17702 }));
+    expect(c.quaryAmount).toBe(17702);
+    expect(round10(17702)).not.toBe(17702);
+  });
+
+  it('treats a zero override as a real value, not as absent', () => {
+    // A trip where no rent was actually paid despite a rate being on file.
+    const c = computeRow(row({ qty: 30, rentRate: 220, vehicleRentOverride: 0 }));
+    expect(c.vehicleRent).toBe(0);
+    // Ton stays computed: it is a display column, and the money is settled.
+    expect(c.vehicleTon).toBeCloseTo(30, 2);
+    expect(c.profit).toBeCloseTo(c.crusherAmount - c.quaryAmount, 2);
+  });
+
+  it('falls back to the formula when an override is absent or unusable', () => {
+    const plain = computeRow(row({ qty: 30.45, quaryRate: 610 }));
+    expect(plain.quaryAmount).toBe(18570);
+
+    // A junk value must not poison every total downstream with NaN.
+    const junk = computeRow(
+      row({ qty: 30.45, quaryRate: 610, quaryAmountOverride: Number.NaN }),
+    );
+    expect(junk.quaryAmount).toBe(18570);
+  });
+
+  it('reports which amounts were typed over', () => {
+    expect(hasOverride(row(), 'quaryAmountOverride')).toBe(false);
+    expect(hasOverride(row({ quaryAmountOverride: 0 }), 'quaryAmountOverride')).toBe(true);
+    expect(hasOverride(row({ vehicleRentOverride: 12 }), 'vehicleRentOverride')).toBe(true);
+    expect(hasOverride(row({ quaryAmountOverride: Number.NaN }), 'quaryAmountOverride')).toBe(
+      false,
+    );
   });
 
   it('zeroes the discount when commRate is 0', () => {

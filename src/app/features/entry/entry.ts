@@ -24,7 +24,7 @@ import {
   type LedgerRowDraft,
 } from '../../core/ledger/ledger-store';
 import { deleteRowWithUndo } from '../../shared/ledger/undo-delete';
-import { computeRow, type ComputedRow } from '../../../domain/calc';
+import { computeRow, hasOverride, type ComputedRow } from '../../../domain/calc';
 import { formatDate, formatInr, formatTons } from '../../../domain/format';
 import { ratePrefill } from '../../../domain/rates';
 import { summarize } from '../../../domain/summaries';
@@ -120,6 +120,8 @@ interface SavedRowView {
    * the thing under test.
    */
   prefix: 'draft-' | 'row-';
+  /** Which settled amounts were typed over rather than computed. */
+  overridden: { quary: boolean; rent: boolean };
 }
 
 /** Today as ISO 'YYYY-MM-DD' in local time (never a UTC-shifted day). */
@@ -161,6 +163,8 @@ export class Entry {
   protected readonly COLUMNS = COLUMNS;
   protected readonly RATE_COLUMNS = RATE_COLUMNS;
   /** Tooltip on a highlighted saved-row rate cell. */
+  protected readonly OVERRIDE_HINT =
+    'Typed over the calculated amount \u2014 clear the cell to go back to the formula';
   protected readonly DIFFERS_HINT =
     'This rate does not match the current rate chart — it was either typed over on entry or the chart changed afterwards. The row keeps its own snapshot.';
 
@@ -196,6 +200,18 @@ export class Entry {
 
   /** Rate cells the user has typed over, so they are not relabelled 'auto'. */
   private readonly overridden = signal<ReadonlySet<RateField>>(new Set());
+
+  /**
+   * Settled amounts typed into the ENTRY row, before the load is saved.
+   *
+   * `null` means "let the formula decide". Separate from the rate signals
+   * because these are amounts rather than rates, and because they must survive
+   * a crusher change exactly as an edited rate cell does.
+   */
+  protected readonly amountOverrides = signal<{
+    quaryAmountOverride: number | null;
+    vehicleRentOverride: number | null;
+  }>({ quaryAmountOverride: null, vehicleRentOverride: null });
 
   private readonly rateSignals: Record<RateField, WritableSignal<number>> = {
     quaryRate: this.quaryRate,
@@ -293,6 +309,10 @@ export class Entry {
         row,
         kind,
         prefix: kind === 'draft' ? ('draft-' as const) : ('row-' as const),
+        overridden: {
+          quary: hasOverride(row, 'quaryAmountOverride'),
+          rent: hasOverride(row, 'vehicleRentOverride'),
+        },
         incomplete: kind === 'draft' && !isDraftComplete(row),
         calc: computeRow(row),
         comparable: prefill !== undefined,
@@ -393,6 +413,13 @@ export class Entry {
       rentRate: this.rentRate(),
       commRate: this.commRate(),
       vehicle: this.vehicle(),
+      // Absent when untouched, so the row stays computed rather than pinned.
+      ...(this.amountOverrides().quaryAmountOverride === null
+        ? {}
+        : { quaryAmountOverride: this.amountOverrides().quaryAmountOverride as number }),
+      ...(this.amountOverrides().vehicleRentOverride === null
+        ? {}
+        : { vehicleRentOverride: this.amountOverrides().vehicleRentOverride as number }),
     };
   }
 
@@ -513,6 +540,9 @@ export class Entry {
     this.editingKind.set(null);
     this.editSource = 'inline';
     this.qty.set(null);
+    // A settled amount belongs to one load. Carrying it to the next would pin a
+    // figure the user never typed for it.
+    this.amountOverrides.set({ quaryAmountOverride: null, vehicleRentOverride: null });
     this.scroller()?.nativeElement.scrollTo({ left: 0 });
     this.qtyCell()?.nativeElement.focus();
   }
@@ -523,8 +553,55 @@ export class Entry {
     this.editingKind.set(null);
     this.editSource = 'inline';
     this.qty.set(null);
+    this.amountOverrides.set({ quaryAmountOverride: null, vehicleRentOverride: null });
     // An inline edit stays on the sheet; a Ledger-tab edit goes back there.
     if (fromQuery) void this.router.navigate(['/ledger']);
+  }
+
+  // --- Settled amounts on the entry row -----------------------------------------
+
+  /** What the entry row's amount cell shows: the override, else the formula. */
+  protected amountValue(field: 'quaryAmountOverride' | 'vehicleRentOverride'): number {
+    const typed = this.amountOverrides()[field];
+    if (typed !== null) return typed;
+    return field === 'quaryAmountOverride'
+      ? this.preview().quaryAmount
+      : this.preview().vehicleRent;
+  }
+
+  /** `edited` once typed over, `auto` while the formula is still deciding. */
+  protected amountOrigin(
+    field: 'quaryAmountOverride' | 'vehicleRentOverride',
+  ): 'auto' | 'edited' {
+    return this.amountOverrides()[field] === null ? 'auto' : 'edited';
+  }
+
+  /**
+   * Type over a settled amount on the entry row, or clear it back to the
+   * formula. Typing the figure the formula already produces is agreement, not
+   * an override, so it stores nothing.
+   */
+  protected onAmountEdit(
+    field: 'quaryAmountOverride' | 'vehicleRentOverride',
+    value: number | string,
+  ): void {
+    const text = String(value ?? '').trim();
+    const current = this.amountOverrides();
+    if (text === '') {
+      this.amountOverrides.set({ ...current, [field]: null });
+      return;
+    }
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed)) return;
+
+    const computed = computeRow({
+      ...this.draftFields(),
+      id: 'preview',
+      [field]: undefined,
+    });
+    const wouldBe =
+      field === 'quaryAmountOverride' ? computed.quaryAmount : computed.vehicleRent;
+    this.amountOverrides.set({ ...current, [field]: parsed === wouldBe ? null : parsed });
   }
 
   // --- Inline editing ----------------------------------------------------------
@@ -548,6 +625,33 @@ export class Entry {
   protected patchQty(view: SavedRowView, value: number | string): void {
     const qty = Number(value);
     this.patchCell(view, { qty: Number.isFinite(qty) ? qty : 0 });
+  }
+
+  /**
+   * Type over a settled amount, or clear the cell to hand the row back to the
+   * formula.
+   *
+   * Typing in the figure the formula already produces is agreement, not an
+   * override, so nothing is stored — otherwise the row would be frozen against
+   * a later rate correction by a value the user never meant to pin.
+   */
+  protected patchAmountOverride(
+    view: SavedRowView,
+    field: 'quaryAmountOverride' | 'vehicleRentOverride',
+    value: number | string,
+  ): void {
+    const text = String(value ?? '').trim();
+    if (text === '') {
+      this.patchCell(view, { [field]: undefined });
+      return;
+    }
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed)) return;
+
+    const computed = computeRow({ ...view.row, [field]: undefined });
+    const wouldBe =
+      field === 'quaryAmountOverride' ? computed.quaryAmount : computed.vehicleRent;
+    this.patchCell(view, { [field]: parsed === wouldBe ? undefined : parsed });
   }
 
   protected patchRate(view: SavedRowView, field: RateField, value: number | string): void {
@@ -650,6 +754,10 @@ export class Entry {
     this.crusherRate.set(row.crusherRate);
     this.rentRate.set(row.rentRate);
     this.commRate.set(row.commRate);
+    this.amountOverrides.set({
+      quaryAmountOverride: row.quaryAmountOverride ?? null,
+      vehicleRentOverride: row.vehicleRentOverride ?? null,
+    });
     // Re-enable prefill once the current effect flush has settled, so later
     // crusher changes behave normally.
     queueMicrotask(() => (this.suppressPrefill = false));
